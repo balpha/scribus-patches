@@ -1,0 +1,45 @@
+# HG changeset patch
+# Parent eec776d37d582089eb3a8f76cd9435c590f949e1
+
+diff -r eec776d37d58 Scribus/scribus/storyeditor.cpp
+--- a/Scribus/scribus/storyeditor.cpp	Sun Jun 23 14:30:39 2013 +0000
++++ b/Scribus/scribus/storyeditor.cpp	Sun Jun 23 18:37:28 2013 +0200
+@@ -412,7 +412,14 @@
+ 				{
+ 					if (conv < 31)
+ 						conv = 32;
+-					insertPlainText(QString(QChar(conv)));
++					if (conv == 0x00AD) // SHYPHEN
++					{
++						setColor(true);
++						insertChars(SpecialChars::SHYPHEN, "-");
++						setColor(false);
++					}
++					else
++						insertPlainText(QString(QChar(conv)));
+ 					emit SideBarUp(true);
+ 					emit SideBarUpdate();
+ 					return;
+@@ -750,7 +757,8 @@
+ 				ch == SpecialChars::FRAMEBREAK ||
+ 				ch == SpecialChars::COLBREAK ||
+ 				ch == SpecialChars::NBHYPHEN ||
+-				ch == SpecialChars::LINEBREAK)
++				ch == SpecialChars::LINEBREAK ||
++				ch == SpecialChars::SHYPHEN)
+ 		{
+ 			setAlign(pAli);
+ 			setEffects(cSty);
+@@ -806,6 +814,12 @@
+ 			insertPlainText("*");
+ 			setColor(false);
+ 		}
++		else if (ch == SpecialChars::SHYPHEN)
++		{
++			setColor(true);
++			insertPlainText("-");
++			setColor(false);
++		}
+ 		else
+ 			text += ch;
+ 	}
