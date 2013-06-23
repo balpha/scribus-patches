@@ -1,0 +1,33 @@
+# HG changeset patch
+# Parent cb53da6b166b8e66e46bcc9be2e66d2b90b15100
+Base the page that an object belongs to on the object's bounding box center
+
+diff -r cb53da6b166b Scribus/scribus/scribusdoc.cpp
+--- a/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 19:39:40 2013 +0200
++++ b/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 19:49:22 2013 +0200
+@@ -4379,10 +4379,21 @@
+ 			double y2 = currItem->BoundingY;
+ 			double w2 = currItem->BoundingW;
+ 			double h2 = currItem->BoundingH;
+-			if (( qMax( x, x2 ) <= qMin( x+w, x2+w2 ) && qMax( y, y2 ) <= qMin( y+h1, y2+h2 )))
+-			{
+-				retw = static_cast<int>(a);
+-				break;
++// on double-sided layouts, use the bounding box center
++// of an object to determine the page that this object
++// belongs to, and not just choose the first page that
++// intersects with the bounding box
++			if ( currentPageLayout == 1 ) // double sided
++			{
++				retw=OnPage(x2+w2/2,y2+h2/2);
++			}
++			if (retw == -1)
++			{
++				if (( qMax( x, x2 ) <= qMin( x+w, x2+w2 ) && qMax( y, y2 ) <= qMin( y+h1, y2+h2 )))
++				{
++					retw = static_cast<int>(a);
++					break;
++				}
+ 			}
+ /*			int x = static_cast<int>(Pages->at(a)->xOffset());
+ 			int y = static_cast<int>(Pages->at(a)->yOffset());
