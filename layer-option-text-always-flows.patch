@@ -1,0 +1,354 @@
+# HG changeset patch
+# Parent b1f892fc03bf2db78cde4f507d8a82d6b2fc6573
+
+diff -r b1f892fc03bf Scribus/scribus/layers.cpp
+--- a/Scribus/scribus/layers.cpp	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/layers.cpp	Sun Jun 23 20:18:26 2013 +0200
+@@ -62,14 +62,15 @@
+ 	layout1->addWidget( opacitySpinBox );
+ 	LayerPaletteLayout->addLayout( layout1 );
+ 
+-	Table = new QTableWidget(0, 7, this );
++	Table = new QTableWidget(0, 8, this );
+ 	Table->setHorizontalHeaderItem(0, new QTableWidgetItem(""));
+ 	Table->setHorizontalHeaderItem(1, new QTableWidgetItem(QIcon(loadIcon("16/show-object.png")), ""));
+ 	Table->setHorizontalHeaderItem(2, new QTableWidgetItem(QIcon(loadIcon("16/document-print.png")), ""));
+ 	Table->setHorizontalHeaderItem(3, new QTableWidgetItem(QIcon(loadIcon("16/lock.png")), ""));
+ 	Table->setHorizontalHeaderItem(4, new QTableWidgetItem(QIcon(loadIcon("16/layer-flow-around.png")), ""));
+-	Table->setHorizontalHeaderItem(5, new QTableWidgetItem(QIcon(loadIcon("layer-outline.png")), ""));
+-	Table->setHorizontalHeaderItem(6, new QTableWidgetItem( tr("Name")));
++	Table->setHorizontalHeaderItem(5, new QTableWidgetItem(QIcon(loadIcon("16/insert-text-frame.png")), ""));
++	Table->setHorizontalHeaderItem(6, new QTableWidgetItem(QIcon(loadIcon("layer-outline.png")), ""));
++	Table->setHorizontalHeaderItem(7, new QTableWidgetItem( tr("Name")));
+ 
+ 	QHeaderView *header = Table->horizontalHeader();
+ 	header->setStretchLastSection(true);
+@@ -84,6 +85,7 @@
+ 	Table->setColumnWidth(3, 24);
+ 	Table->setColumnWidth(4, 24);
+ 	Table->setColumnWidth(5, 24);
++	Table->setColumnWidth(6, 24);
+ 	Table->setSortingEnabled(false);
+ 	Table->setSelectionBehavior( QAbstractItemView::SelectRows );
+ 	QHeaderView *Header = Table->verticalHeader();
+@@ -239,12 +241,20 @@
+ 		connect(cp4, SIGNAL(clicked()), this, SLOT(flowToggleLayer()));
+ 		Table->setCellWidget(row, 4, cp4);
+ 		cp4->setChecked(m_Doc->layerFlow(layerNumber));
++
+ 		QCheckBox *cp5 = new QCheckBox(this);
+ 		cp5->setObjectName(tmp);
+-		connect(cp5, SIGNAL(clicked()), this, SLOT(outlineToggleLayer()));
++		connect(cp5, SIGNAL(clicked()), this, SLOT(textAlwaysFlowsToggleLayer()));
+ 		Table->setCellWidget(row, 5, cp5);
+-		cp5->setChecked(m_Doc->layerOutline(layerNumber));
+-		Table->setItem(row, 6, new QTableWidgetItem(m_Doc->layerName(layerNumber)));
++		cp5->setChecked(m_Doc->layerTextAlwaysFlows(layerNumber));
++		
++		QCheckBox *cp6 = new QCheckBox(this);
++		cp6->setObjectName(tmp);
++		connect(cp6, SIGNAL(clicked()), this, SLOT(outlineToggleLayer()));
++		Table->setCellWidget(row, 6, cp6);
++		cp6->setChecked(m_Doc->layerOutline(layerNumber));
++
++		Table->setItem(row, 7, new QTableWidgetItem(m_Doc->layerName(layerNumber)));
+ 	}
+ 	connect(Table, SIGNAL(cellChanged(int, int)), this, SLOT(changeName(int, int)));
+ 	connect(Table, SIGNAL(cellClicked(int, int)), this, SLOT(setActiveLayer(int, int)));
+@@ -346,7 +356,7 @@
+ {
+ 	if (!m_Doc)
+ 		return;
+-	if (col == 6)
++	if (col == 7)
+ 	{
+ 		int layerLevel = m_Doc->layerCount()-1-row;
+ 		int layerNumber=m_Doc->layerNumberFromLevel(layerLevel);
+@@ -424,6 +434,21 @@
+ 	}
+ }
+ 
++void LayerPalette::textAlwaysFlowsToggleLayer()
++{
++	int level = QString(sender()->objectName()).toInt();
++	int layerNumber=m_Doc->layerNumberFromLevel(level);
++	if (layerNumber==-1)
++		return;
++	const QObject* senderBox=sender();
++	if (strcmp(senderBox->metaObject()->className(), "QCheckBox") == 0)
++	{
++		m_Doc->setLayerTextAlwaysFlows(layerNumber,((QCheckBox*)(senderBox))->isChecked());
++		setActiveLayer(Table->currentRow(), -1);
++	}
++}
++
++
+ void LayerPalette::outlineToggleLayer()
+ {
+ 	if (!m_Doc)
+@@ -470,10 +495,15 @@
+ 				((QCheckBox*)(Table->cellWidget(row, 4)))->toggle();
+ 				it->flowControl = ((QCheckBox*)(Table->cellWidget(row, 4)))->isChecked();
+ 			}
+-			else if (index == 5)
++			if (index == 5)
+ 			{
+ 				((QCheckBox*)(Table->cellWidget(row, 5)))->toggle();
+-				it->outlineMode = ((QCheckBox*)(Table->cellWidget(row, 5)))->isChecked();
++				it->textAlwaysFlows = ((QCheckBox*)(Table->cellWidget(row, 5)))->isChecked();
++			}
++			else if (index == 6)
++			{
++				((QCheckBox*)(Table->cellWidget(row, 6)))->toggle();
++				it->outlineMode = ((QCheckBox*)(Table->cellWidget(row, 6)))->isChecked();
+ 			}
+ 		}
+ 		emit LayerChanged();
+@@ -531,7 +561,7 @@
+ 	int layerToMark=layerNumber;
+ 	if (layerNumber==-1)
+ 		layerToMark=m_Doc->activeLayer();
+-	Table->setCurrentCell(m_Doc->layerCount()-1-m_Doc->layerLevelFromNumber(layerToMark), 6);
++	Table->setCurrentCell(m_Doc->layerCount()-1-m_Doc->layerLevelFromNumber(layerToMark), 7);
+ 	opacitySpinBox->setValue(qRound(m_Doc->layerTransparency(layerToMark) * 100));
+ 	blendMode->setCurrentIndex(m_Doc->layerBlendMode(layerToMark));
+ 	deleteLayerButton->setEnabled(m_Doc->layerCount()>1 && !m_Doc->layerLocked( m_Doc->activeLayer() ));
+@@ -555,7 +585,7 @@
+ {
+ 	if (!m_Doc)
+ 		return;
+-	if (col != 6)
++	if (col != 7)
+ 	{
+ 		markActiveLayer(-1);
+ 		return;
+@@ -618,7 +648,7 @@
+ 	blendMode->addItem( tr("Luminosity"));
+ 	textLabel2->setText( tr( "Opacity:" ) );
+ 	opacitySpinBox->setSuffix( tr(" %"));
+-	Table->horizontalHeaderItem(6)->setText( tr("Name"));
++	Table->horizontalHeaderItem(7)->setText( tr("Name"));
+ 	newLayerButton->setToolTip("");
+ 	duplicateLayerButton->setToolTip("");
+ 	deleteLayerButton->setToolTip("");
+@@ -638,8 +668,9 @@
+ 	Table->horizontalHeaderItem(2)->setToolTip("<qt>" + tr("Print Layer - Uncheck to disable printing. ") + "</qt>" );
+ 	Table->horizontalHeaderItem(3)->setToolTip("<qt>" + tr("Lock or Unlock Layer - Unchecked is unlocked ") + "</qt>" );
+ 	Table->horizontalHeaderItem(4)->setToolTip("<qt>" + tr("Make text in lower layers flow around objects - Enabling this forces text in lower layers to flow around objects of the layer for which this option has been enabled") + "</qt>" );
+-	Table->horizontalHeaderItem(5)->setToolTip("<qt>" + tr("Outline Mode - Toggles the 'wireframe' display of objects to speed the display of very complex objects.") + "</qt>" ) ;
+-	Table->horizontalHeaderItem(6)->setToolTip("<qt>" + tr("Name of the Layer - Double click on the name of a layer to edit the name") + "</qt>" );
++	Table->horizontalHeaderItem(5)->setToolTip("<qt>" + tr("Text on this layer flows around all flow-enabled objects; no matter on what layer they are (as long as their layer is flow-enabled)") + "</qt>" );
++	Table->horizontalHeaderItem(6)->setToolTip("<qt>" + tr("Outline Mode - Toggles the 'wireframe' display of objects to speed the display of very complex objects.") + "</qt>" ) ;
++	Table->horizontalHeaderItem(7)->setToolTip("<qt>" + tr("Name of the Layer - Double click on the name of a layer to edit the name") + "</qt>" );
+ }
+ 
+ 
+diff -r b1f892fc03bf Scribus/scribus/layers.h
+--- a/Scribus/scribus/layers.h	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/layers.h	Sun Jun 23 20:18:26 2013 +0200
+@@ -55,6 +55,7 @@
+ 	void printLayer();
+ 	void lockLayer();
+ 	void flowToggleLayer();
++	void textAlwaysFlowsToggleLayer();
+ 	void outlineToggleLayer();
+ 	void toggleAllfromHeader(int index);
+ 	void markLayer();
+diff -r b1f892fc03bf Scribus/scribus/pageitem_textframe.cpp
+--- a/Scribus/scribus/pageitem_textframe.cpp	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/pageitem_textframe.cpp	Sun Jun 23 20:18:26 2013 +0200
+@@ -151,7 +151,7 @@
+ 				if (docItem->OnMasterPage != OnMasterPage)
+ 					continue;
+ 				LayerLevItem = m_Doc->layerLevelFromNumber(docItem->LayerNr);
+-				if (((docItem->ItemNr > ItemNr) && (docItem->LayerNr == LayerNr)) || (LayerLevItem > LayerLev && m_Doc->layerFlow(docItem->LayerNr)))
++				if (((docItem->ItemNr > ItemNr) && (docItem->LayerNr == LayerNr)) || ((LayerLevItem > LayerLev || m_Doc->layerTextAlwaysFlows(LayerNr)) && m_Doc->layerFlow(docItem->LayerNr)))
+ 				{
+ 					if (docItem->Groups.count() == 0)
+ 						currentGroup = -1;
+@@ -189,7 +189,7 @@
+ 			{
+ 				docItem = m_Doc->Items->at(a);
+ 				LayerLevItem = m_Doc->layerLevelFromNumber(docItem->LayerNr);
+-				if (((docItem->ItemNr > ItemNr) && (docItem->LayerNr == LayerNr)) || (LayerLevItem > LayerLev && m_Doc->layerFlow(docItem->LayerNr)))
++				if (((docItem->ItemNr > ItemNr) && (docItem->LayerNr == LayerNr)) || ((LayerLevItem > LayerLev || m_Doc->layerTextAlwaysFlows(LayerNr)) && m_Doc->layerFlow(docItem->LayerNr)))
+ 				{
+ 					if (docItem->Groups.count() == 0)
+ 						currentGroup = -1;
+diff -r b1f892fc03bf Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Jun 23 20:18:26 2013 +0200
+@@ -567,6 +567,7 @@
+ 				la.isPrintable  = pg.attribute("DRUCKEN").toInt();
+ 				la.isEditable   = pg.attribute("EDIT", "1").toInt();
+ 				la.flowControl  = pg.attribute("FLOW", "1").toInt();
++				la.textAlwaysFlows  = pg.attribute("TEXTALWAYSFLOWS", "0").toInt();
+ 				la.transparency = ScCLocale::toDoubleC( pg.attribute("TRANS"), 1.0);
+ 				la.blendMode    = pg.attribute("BLEND", "0").toInt();
+ 				la.outlineMode  = pg.attribute("OUTL", "0").toInt();
+@@ -2856,6 +2857,7 @@
+ 				la.isPrintable  = pg.attribute("DRUCKEN").toInt();
+ 				la.isEditable   = pg.attribute("EDIT", "1").toInt();
+ 				la.flowControl  = pg.attribute("FLOW", "1").toInt();
++				la.textAlwaysFlows  = pg.attribute("TEXTALWAYSFLOWS", "0").toInt();
+ 				la.transparency = ScCLocale::toDoubleC( pg.attribute("TRANS"), 1.0);
+ 				la.blendMode    = pg.attribute("BLEND", "0").toInt();
+ 				la.outlineMode  = pg.attribute("OUTL", "0").toInt();
+diff -r b1f892fc03bf Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Jun 23 20:18:26 2013 +0200
+@@ -603,6 +603,7 @@
+ 		docu.writeAttribute("DRUCKEN", static_cast<int>(m_Doc->Layers[lay].isPrintable));
+ 		docu.writeAttribute("EDIT", static_cast<int>(m_Doc->Layers[lay].isEditable));
+ 		docu.writeAttribute("FLOW", static_cast<int>(m_Doc->Layers[lay].flowControl));
++		docu.writeAttribute("TEXTALWAYSFLOWS", static_cast<int>(m_Doc->Layers[lay].textAlwaysFlows));
+ 		docu.writeAttribute("TRANS", m_Doc->Layers[lay].transparency);
+ 		docu.writeAttribute("BLEND", m_Doc->Layers[lay].blendMode);
+ 		docu.writeAttribute("OUTL", static_cast<int>(m_Doc->Layers[lay].outlineMode));
+diff -r b1f892fc03bf Scribus/scribus/sclayer.cpp
+--- a/Scribus/scribus/sclayer.cpp	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/sclayer.cpp	Sun Jun 23 20:18:26 2013 +0200
+@@ -19,7 +19,8 @@
+ 	isPrintable  = true;
+ 	isViewable   = true;
+ 	isEditable   = true;
+-	flowControl  = true;
++	flowControl  = true;
++	textAlwaysFlows = false;
+ 	outlineMode  = false;
+ 	transparency = 1.0;
+ 	blendMode    = 0;
+@@ -35,6 +36,7 @@
+ 	isViewable   = true;
+ 	isEditable   = true;
+ 	flowControl  = true;
++	textAlwaysFlows = false;
+ 	outlineMode  = false;
+ 	transparency = 1.0;
+ 	blendMode    = 0;
+@@ -75,7 +77,8 @@
+ 	// ignore markerColor?
+ 	if (Name == other.Name && LNr == other.LNr && Level == other.Level      &&
+ 		isPrintable  == other.isPrintable  && isViewable  == other.isViewable  &&
+-		flowControl  == other.flowControl  && outlineMode == other.outlineMode && 
++		flowControl  == other.flowControl  && outlineMode == other.outlineMode &&
++		textAlwaysFlows == other.textAlwaysFlows &&
+ 		transparency == other.transparency && isEditable == other.isEditable &&
+ 		blendMode   == other.blendMode)
+ 	{
+@@ -133,7 +136,8 @@
+ 			layer.isEditable   = ll.isEditable;
+ 			layer.LNr          = ll.LNr;
+ 			layer.Name         = ll.Name;
+-			layer.flowControl  = ll.flowControl;
++			layer.flowControl  = ll.flowControl;
++			layer.textAlwaysFlows = ll.textAlwaysFlows;
+ 			layer.transparency = ll.transparency;
+ 			layer.blendMode    = ll.blendMode;
+ 			break;
+@@ -557,6 +561,26 @@
+ 	}
+ 	return false;
+ }
++
++bool ScLayers::layerTextAlwaysFlows(const int layerNumber) const
++{
++	const ScLayer* layer = layerByNumber(layerNumber);
++	if (layer)
++		return layer->textAlwaysFlows;
++	return false;
++}
++
++bool ScLayers::setLayerTextAlwaysFlows(const int layerNumber, const bool isAlwaysFlowing)
++{
++	ScLayer* layer = byNumber(layerNumber);
++	if (layer)
++	{
++		layer->textAlwaysFlows = isAlwaysFlowing;
++		return true;
++	}
++	return false;
++}
++
+ 
+ bool ScLayers::layerOutline(const int layerNumber) const
+ {
+diff -r b1f892fc03bf Scribus/scribus/sclayer.h
+--- a/Scribus/scribus/sclayer.h	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/sclayer.h	Sun Jun 23 20:18:26 2013 +0200
+@@ -25,7 +25,8 @@
+ 	bool    isPrintable;
+ 	bool    isViewable;
+ 	bool    isEditable;
+-	bool    flowControl;
++	bool    flowControl;
++	bool    textAlwaysFlows;
+ 	bool    outlineMode;
+ 	double  transparency;
+ 	int     blendMode;
+@@ -254,6 +255,10 @@
+ 	 * @return flow or not
+ 	 */
+ 	bool layerFlow(const int layerNumber) const;
++
++
++	bool setLayerTextAlwaysFlows(const int layerNumber, const bool isAlwaysFlowing);
++	bool layerTextAlwaysFlows(const int layerNumber) const;
+ 
+ 	/**
+ 	 * @brief Set the layer flow via the layer number
+diff -r b1f892fc03bf Scribus/scribus/scribusdoc.cpp
+--- a/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 20:18:26 2013 +0200
+@@ -2399,6 +2399,37 @@
+ 	return false;
+ }
+ 
++bool ScribusDoc::setLayerTextAlwaysFlows(const int layerNumber, const bool isAlwaysFlowing)
++{
++	ScLayers::iterator itend=Layers.end();
++	ScLayers::iterator it;
++	bool found=false;
++	for (it = Layers.begin(); it != itend; ++it)
++	{
++		if ((*it).LNr == layerNumber)
++		{
++			(*it).textAlwaysFlows = isAlwaysFlowing;
++			found=true;
++			break;
++		}
++	}
++	if (found)
++		changed();
++	return found;
++}
++
++
++bool ScribusDoc::layerTextAlwaysFlows(const int layerNumber)
++{
++	ScLayers::iterator itend=Layers.end();
++	ScLayers::iterator it;
++	for (it = Layers.begin(); it != itend; ++it)
++	{
++		if ((*it).LNr == layerNumber)
++			return (*it).textAlwaysFlows;
++	}
++	return false;
++}
+ 
+ bool ScribusDoc::setLayerTransparency(const int layerNumber, double trans)
+ {
+diff -r b1f892fc03bf Scribus/scribus/scribusdoc.h
+--- a/Scribus/scribus/scribusdoc.h	Sun Jun 23 19:49:22 2013 +0200
++++ b/Scribus/scribus/scribusdoc.h	Sun Jun 23 20:18:26 2013 +0200
+@@ -292,6 +292,10 @@
+ 	 * @return flow or not
+ 	 */
+ 	bool layerFlow(const int layerNumber);
++
++	bool setLayerTextAlwaysFlows(const int layerNumber, const bool isAlwaysFlowing);
++	bool layerTextAlwaysFlows(const int layerNumber);
++
+ 	/**
+ 	 * @brief Set the layer transparency via the layer number
+ 	 * @param layerNumber Number of the layer
