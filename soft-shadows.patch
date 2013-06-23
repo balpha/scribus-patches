@@ -1,0 +1,724 @@
+# HG changeset patch
+# Parent c3ee39dfbf0090172aa5720a2838ee7d0d914b16
+
+diff -r c3ee39dfbf00 Scribus/scribus/documentchecker.cpp
+--- a/Scribus/scribus/documentchecker.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/documentchecker.cpp	Sun Jun 23 19:39:40 2013 +0200
+@@ -89,7 +89,7 @@
+ 		itemError.clear();
+ 		if (((currItem->isAnnotation()) || (currItem->isBookmark)) && (checkerSettings.checkAnnotations))
+ 			itemError.insert(PDFAnnotField, 0);
+-		if (((currItem->fillTransparency() != 0.0) || (currItem->lineTransparency() != 0.0) || (currItem->fillBlendmode() != 0) || (currItem->lineBlendmode() != 0)) && (checkerSettings.checkTransparency))
++		if ((currItem->hasSoftShadow || (currItem->fillTransparency() != 0.0) || (currItem->lineTransparency() != 0.0) || (currItem->fillBlendmode() != 0) || (currItem->lineBlendmode() != 0)) && (checkerSettings.checkTransparency))
+ 			itemError.insert(Transparency, 0);
+ 		if ((currItem->GrType != 0) && (checkerSettings.checkTransparency))
+ 		{
+@@ -205,7 +205,7 @@
+ 		if (!(currDoc->layerPrintable(currItem->LayerNr)) && (checkerSettings.ignoreOffLayers))
+ 			continue;
+ 		itemError.clear();
+-		if (((currItem->fillTransparency() != 0.0) || (currItem->lineTransparency() != 0.0) || (currItem->fillBlendmode() != 0) || (currItem->lineBlendmode() != 0)) && (checkerSettings.checkTransparency))
++		if ((currItem->hasSoftShadow || (currItem->fillTransparency() != 0.0) || (currItem->lineTransparency() != 0.0) || (currItem->fillBlendmode() != 0) || (currItem->lineBlendmode() != 0)) && (checkerSettings.checkTransparency))
+ 			itemError.insert(Transparency, 0);
+ 		if ((currItem->GrType != 0) && (checkerSettings.checkTransparency))
+ 		{
+diff -r c3ee39dfbf00 Scribus/scribus/pageitem.cpp
+--- a/Scribus/scribus/pageitem.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/pageitem.cpp	Sun Jun 23 19:39:40 2013 +0200
+@@ -160,6 +160,14 @@
+ 	fill_gradient(other.fill_gradient),
+ 	fillRule(other.fillRule),
+ 	doOverprint(other.doOverprint),
++	hasSoftShadow(other.hasSoftShadow),
++	softShadowColor(other.softShadowColor),
++	softShadowBlurRadius(other.softShadowBlurRadius),
++	softShadowXOffset(other.softShadowXOffset),
++	softShadowYOffset(other.softShadowYOffset),
++	softShadowDPI(other.softShadowDPI),
++	softShadowOpacity(other.softShadowOpacity),
++	softShadowBlendMode(other.softShadowBlendMode),
+ 	LeftLink(other.LeftLink),
+ 	RightLink(other.RightLink),
+ 	TopLink(other.TopLink),
+@@ -299,6 +307,16 @@
+ 	//CB Surely we can remove some of these?
+ 	OldB2 = OldB = oldWidth = Width = w;
+ 	OldH2 = OldH = oldHeight = Height = h;
++	
++	hasSoftShadow=false;
++	softShadowColor=CommonStrings::None;
++	softShadowBlurRadius=10.0;
++	softShadowXOffset=0.0;
++	softShadowYOffset=0.0;
++	softShadowDPI=300.0;
++	softShadowOpacity=0.7;
++	softShadowBlendMode=0;
++
+ 	BoundingX = x;
+ 	BoundingY = y;
+ 	BoundingW = w;
+@@ -1608,13 +1626,18 @@
+ 
+ QImage PageItem::DrawObj_toImage()
+ {
++	return DrawObj_toImage_withScale(1.0);
++}
++
++QImage PageItem::DrawObj_toImage_withScale(double scale, bool ignoreGroups)
++{
+ 	QList<PageItem*> emG;
+ 	emG.clear();
+ 	double minx =  std::numeric_limits<double>::max();
+ 	double miny =  std::numeric_limits<double>::max();
+ 	double maxx = -std::numeric_limits<double>::max();
+ 	double maxy = -std::numeric_limits<double>::max();
+-	if (Groups.count() != 0)
++	if (!ignoreGroups && Groups.count() != 0)
+ 	{
+ 		for (int ga=0; ga<m_Doc->Items->count(); ++ga)
+ 		{
+@@ -1659,17 +1682,22 @@
+ 		gHeight = maxy - miny;
+ 		emG.append(this);
+ 	}
+-	return DrawObj_toImage(emG);
++	return DrawObj_toImage_withScale(emG,scale);
+ }
+ 
+ QImage PageItem::DrawObj_toImage(QList<PageItem*> &emG)
+ {
+-	QImage retImg = QImage(qRound(gWidth), qRound(gHeight), QImage::Format_ARGB32);
++	return DrawObj_toImage_withScale(emG, 1.0);
++}
++
++QImage PageItem::DrawObj_toImage_withScale(QList<PageItem*> &emG, double scale)
++{
++	QImage retImg = QImage(qRound(gWidth * scale), qRound(gHeight * scale), QImage::Format_ARGB32);
+ //	retImg.fill( qRgba(255, 255, 255, 0) );
+ 	retImg.fill( qRgba(0, 0, 0, 0) );
+ 	ScPainter *painter = new ScPainter(&retImg, retImg.width(), retImg.height(), 1, 0);
+ //	painter->setZoomFactor(1.0);
+-	painter->setZoomFactor(qMax(qRound(gWidth) / gWidth, qRound(gHeight) / gHeight));
++	painter->setZoomFactor(qMax(qRound(gWidth * scale) / gWidth, qRound(gHeight * scale) / gHeight));
+ 	QStack<PageItem*> groupStack;
+ 	for (int em = 0; em < emG.count(); ++em)
+ 	{
+diff -r c3ee39dfbf00 Scribus/scribus/pageitem.h
+--- a/Scribus/scribus/pageitem.h	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/pageitem.h	Sun Jun 23 19:39:40 2013 +0200
+@@ -284,6 +284,8 @@
+ 	virtual void DrawObj_Post(ScPainter *p);
+ 	virtual void DrawObj_Item(ScPainter *p, QRectF e, double sc) = 0;
+ 	QImage DrawObj_toImage();
++	QImage DrawObj_toImage_withScale(double scale, bool ignoreGroups=false);
++	QImage DrawObj_toImage_withScale(QList<PageItem*> &emG,double scale);
+ 	QImage DrawObj_toImage(QList<PageItem*> &emG);
+ 	
+ 	virtual void applicableActions(QStringList& actionList) = 0;
+@@ -533,6 +535,14 @@
+ 	VGradient fill_gradient;
+ 	bool fillRule;
+ 	bool doOverprint;
++	bool hasSoftShadow;
++	QString softShadowColor;
++	double softShadowBlurRadius;
++	double softShadowXOffset;
++	double softShadowYOffset;
++	double softShadowDPI;
++	double softShadowOpacity;
++	int softShadowBlendMode;
+ /* Additions for Table Support */
+ 	PageItem* LeftLink;
+ 	PageItem* RightLink;
+@@ -628,6 +638,15 @@
+ 	//
+ 	bool overprint() const { return doOverprint; }
+ 	void setOverprint(bool val) { doOverprint = val; }
++	// soft shadow
++	void setHasSoftShadow(bool val) { hasSoftShadow = val; }
++	void setSoftShadowColor(const QString &newColor) { softShadowColor = newColor; }
++	void setSoftShadowBlurRadius(double val) { softShadowBlurRadius = val; }
++	void setSoftShadowXOffset(double val) { softShadowXOffset = val; }
++	void setSoftShadowYOffset(double val) { softShadowYOffset = val; }
++	void setSoftShadowDPI(double val) { softShadowDPI = val; }
++	void setSoftShadowOpacity(double val) { softShadowOpacity = val; }
++	void setSoftShadowBlendMode(int val) { softShadowBlendMode = val; }
+ 	// rect / oval / round / other
+ 	int frameType() const { return FrameType; }
+ 	void setFrameType(int val) { FrameType = val; }
+diff -r c3ee39dfbf00 Scribus/scribus/pageitem_desaxe.cpp
+--- a/Scribus/scribus/pageitem_desaxe.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/pageitem_desaxe.cpp	Sun Jun 23 19:39:40 2013 +0200
+@@ -82,6 +82,15 @@
+ 	result.insert("fill-evenodd", toXMLString(item->fillEvenOdd()));
+ 	result.insert("do-overprint", toXMLString(item->overprint()));
+ 	
++	result.insert("has-soft-shadow", toXMLString(item->hasSoftShadow));
++	result.insert("soft-shadow-color", item->softShadowColor);	
++	result.insert("soft-shadow-blur-radius", toXMLString(item->softShadowBlurRadius));
++	result.insert("soft-shadow-x-offset", toXMLString(item->softShadowXOffset));	
++	result.insert("soft-shadow-y-offset", toXMLString(item->softShadowYOffset));	
++	result.insert("soft-shadow-dpi", toXMLString(item->softShadowDPI));	
++	result.insert("soft-shadow-opacity", toXMLString(item->softShadowOpacity));	
++	result.insert("soft-shadow-blend-mode", toXMLString(item->softShadowBlendMode));	
++	
+ 	result.insert("line-color", item->lineColor());
+ 	result.insert("line-shade", toXMLString(item->lineShade()));
+ 	result.insert("line-transparency", toXMLString(item->lineTransparency()));
+@@ -648,6 +657,15 @@
+ 	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,bool>( & PageItem::setFillEvenOdd, "frame-fill-evenodd", &parseBool ));
+ 	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,bool>( & PageItem::setOverprint, "do-overprint", &parseBool ));
+ 	
++	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,bool>( & PageItem::setHasSoftShadow, "has-soft-shadow", &parseBool ));
++	ruleset.addRule(itemPrefix, SetAttribute<PageItem,const QString&>( & PageItem::setSoftShadowColor, "soft-shadow-color", dummy ));
++	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setSoftShadowBlurRadius, "soft-shadow-blur-radius", &parseDouble ));
++	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setSoftShadowXOffset, "soft-shadow-x-offset", &parseDouble ));
++	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setSoftShadowYOffset, "soft-shadow-y-offset", &parseDouble ));
++	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setSoftShadowDPI, "soft-shadow-dpi", &parseDouble ));
++	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setSoftShadowOpacity, "soft-shadow-opacity", &parseDouble ));
++	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,int>( & PageItem::setSoftShadowBlendMode, "soft-shadow-blend-mode", &parseInt ));
++		
+ 	ruleset.addRule(itemPrefix, SetAttribute<PageItem,const QString&>( & PageItem::setLineColor, "line-color", dummy ));  // also in createPageItem()
+ 	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setLineShade, "line-shade", &parseDouble ));
+ 	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setLineTransparency, "line-transparency", &parseDouble ));
+diff -r c3ee39dfbf00 Scribus/scribus/pdflib_core.cpp
+--- a/Scribus/scribus/pdflib_core.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/pdflib_core.cpp	Sun Jun 23 19:39:40 2013 +0200
+@@ -2847,6 +2847,7 @@
+ 				QString grcon = "";
+ 				if (ite->isGroupControl)
+ 				{
++					grcon += PDF_PutSoftShadow(ite,pag);
+ 					grcon += "q\n";
+ 					FPointArray cl = ite->PoLine.copy();
+ 					FPointArray clb = ite->PoLine.copy();
+@@ -3132,9 +3133,130 @@
+ 	return tmp;
+ }
+ 
++QString PDFLibCore::PDF_PutSoftShadow(PageItem* ite, const Page* pag)
++{
++	if (Options.Version < PDFOptions::PDFVersion_14 || !ite->hasSoftShadow || ite->softShadowColor==CommonStrings::None)
++		return "";
++		 
++	QString tmp("q ");
++	ite->softShadowDPI = 300.0;
++	int pixelRadius=round(ite->softShadowBlurRadius / 72.0 * ite->softShadowDPI);
++	QRectF rect=ite->getVisualBoundingRect();
++	tmp += FToStr(rect.width()+2*ite->softShadowBlurRadius) + " 0 0 " + FToStr(rect.height()+2*ite->softShadowBlurRadius)+" " ;
++	tmp += FToStr(rect.left() - pag->xOffset()+ite->softShadowXOffset-ite->softShadowBlurRadius)+" " ;
++	tmp += FToStr(pag->height() - (rect.top() - pag->yOffset())-rect.height()-ite->softShadowYOffset-ite->softShadowBlurRadius)+" cm\n";
++
++	QImage imgC = ite->DrawObj_toImage_withScale(ite->softShadowDPI/72.0, !ite->isGroupControl);
++
++	imgC = imgC.copy(-pixelRadius,-pixelRadius,imgC.width()+2*pixelRadius,imgC.height()+2*pixelRadius); // Add border
++	ScImage img = imgC.alphaChannel().convertToFormat(QImage::Format_RGB32);
++
++	ImageEffect eff;
++	ScImageEffectList el;
++	eff.effectCode = ScImage::EF_BLUR;
++	eff.effectParameters = QString("%1 1.0").arg(pixelRadius);
++	el.append(eff);
++	img.applyEffect(el,ite->doc()->PageColors,false);
++
++	uint maskObj = newObject();
++	StartObj(maskObj);
++	PutDoc("<<\n/Type /XObject\n/Subtype /Image\n");
++	PutDoc("/Width "+QString::number(img.width())+"\n");
++	PutDoc("/Height "+QString::number(img.height())+"\n");
++	PutDoc("/ColorSpace /DeviceGray\n");
++	PutDoc("/BitsPerComponent 8\n");
++	uint lengthObj = newObject();
++	PutDoc("/Length "+QString::number(lengthObj)+" 0 R\n");
++	PutDoc("/Filter /FlateDecode\n");
++	PutDoc(">>\nstream\n");
++	int bytesWritten = WriteFlateImageToStream(img, maskObj, false, true, false);
++	PutDoc("\nendstream\nendobj\n");
++	StartObj(lengthObj);
++	PutDoc(QString("    %1\n").arg(bytesWritten));
++	PutDoc("endobj\n");
++
++	StartObj(lengthObj);
++	PutDoc(QString("    %1\n").arg(bytesWritten));
++	PutDoc("endobj\n");
++
++	uint colObj=newObject();
++	StartObj(colObj);
++	PutDoc("<<\n/Type /XObject\n/Subtype /Image\n");
++	PutDoc("/Width 1\n");
++	PutDoc("/Height 1\n");
++	PutDoc("/Interpolate false\n");
++	PutDoc("/BitsPerComponent 8\n");
++	PutDoc("/SMask "+QString::number(maskObj)+" 0 R\n");
++
++	ScImage col(1,1);
++	QString colstr = SetColor(ite->softShadowColor, 100);
++	if (Options.isGrayscale)
++	{
++		double gf;
++		int g;
++		QTextStream ts(&colstr, QIODevice::ReadOnly);
++		ts >> gf;
++		g = round(gf*255);
++		col.imgInfo.colorspace = ColorSpaceGray;
++		col.qImagePtr()->setPixel(0,0,qRgba(g,g,g,255));
++		PutDoc("/ColorSpace /DeviceGray\n");
++		PutDoc("/Length 1\n");
++		PutDoc(">>\nstream\n");
++		WriteImageToStream(col, colObj, false, true, true);
++		PutDoc("\nendstream\nendobj\n");
++	}
++	else if (Options.UseRGB)
++	{
++		double r,g,b;
++		QTextStream ts(&colstr, QIODevice::ReadOnly);
++		ts >> r;
++		ts >> g;
++		ts >> b;
++		col.imgInfo.colorspace = ColorSpaceRGB;
++		col.qImagePtr()->setPixel(0,0,qRgba(round(r*255),round(g*255),round(b*255),255));
++		PutDoc("/ColorSpace /DeviceRGB\n");
++		PutDoc("/Length 3\n");
++		PutDoc(">>\nstream\n");
++		WriteImageToStream(col, colObj, false, false, false);
++		PutDoc("\nendstream\nendobj\n");
++	}
++	else //CMYK
++	{	
++		double c,m,y,k;
++		QTextStream ts(&colstr, QIODevice::ReadOnly);
++		ts >> c;
++		ts >> m;
++		ts >> y;
++		ts >> k;
++		col.imgInfo.colorspace = ColorSpaceCMYK;
++		col.qImagePtr()->setPixel(0,0,qRgba(round(c*255),round(m*255),round(y*255),round(k*255)));
++		PutDoc("/ColorSpace /DeviceCMYK\n");
++		PutDoc("/Length 4\n");
++		PutDoc(">>\nstream\n");
++		WriteImageToStream(col, colObj, true, false, false);
++		PutDoc("\nendstream\nendobj\n");
++	}
++
++	QString colRes = ResNam+QString::number(ResCount);
++	Seite.ImgObjects[colRes] = colObj;
++	ResCount++;
++
++	QString ShName = ResNam+QString::number(ResCount);
++	ResCount++;
++	Transpar[ShName] = writeGState("/ca "+FToStr(ite->softShadowOpacity)+"\n"
++								   + "/AIS false\n/OPM 1\n"
++								   + "/BM /" + blendMode(ite->softShadowBlendMode) + "\n");
++
++	tmp += "/"+ShName+" gs\n";
++
++	tmp += "/"+colRes+" Do Q\n";
++	return tmp;
++}	
++
+ bool PDFLibCore::PDF_ProcessItem(QString& output, PageItem* ite, const Page* pag, uint PNr, bool embedded, bool pattern)
+ {
+ 	QString tmp(""), tmpOut;
++	tmp += PDF_PutSoftShadow(ite,pag);
+ 	ite->setRedrawBounding();
+ 	double bLeft, bRight, bBottom, bTop;
+ 	getBleeds(pag, bLeft, bRight, bBottom, bTop);
+diff -r c3ee39dfbf00 Scribus/scribus/pdflib_core.h
+--- a/Scribus/scribus/pdflib_core.h	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/pdflib_core.h	Sun Jun 23 19:39:40 2013 +0200
+@@ -145,6 +145,7 @@
+ 	QByteArray ComputeRC4Key(int ObjNum);
+ 	
+ 	bool    PDF_ProcessItem(QString& output, PageItem* ite, const Page* pag, uint PNr, bool embedded = false, bool pattern = false);
++	QString PDF_PutSoftShadow(PageItem* ite, const Page* pag);
+ 	QString PDF_ProcessTableItem(PageItem* ite, const Page* pag);
+ 	QString drawArrow(PageItem *ite, QMatrix &arrowTrans, int arrowIndex);
+ 	void    PDF_Bookmark(PageItem *currItem, double ypos);
+diff -r c3ee39dfbf00 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Jun 23 19:39:40 2013 +0200
+@@ -2520,6 +2520,15 @@
+ 		currItem->setTextFlowMode(PageItem::TextFlowDisabled);
+ 	currItem->DashOffset = ScCLocale::toDoubleC( obj->attribute("DASHOFF"), 0.0);
+ 	currItem->setReversed(static_cast<bool>(obj->attribute("REVERS", "0").toInt()));
++
++	currItem->hasSoftShadow = static_cast<bool>(obj->attribute("HASSOFTSHADOW", "0").toInt());
++	currItem->softShadowXOffset = obj->attribute("SOFTSHADOWXOFFSET", "0.0").toDouble();
++	currItem->softShadowYOffset = obj->attribute("SOFTSHADOWYOFFSET", "0.0").toDouble();
++	currItem->softShadowColor = obj->attribute("SOFTSHADOWCOLOR", CommonStrings::None);
++	currItem->softShadowBlurRadius = obj->attribute("SOFTSHADOWBLURRADIUS", "300.0").toDouble();
++	currItem->softShadowBlendMode = (obj->attribute("SOFTSHADOWBLENDMODE", "0").toInt());
++	currItem->softShadowOpacity = obj->attribute("SOFTSHADOWOPACITY", "1.0").toDouble();
++
+ 	currItem->setLocked(static_cast<bool>(obj->attribute("LOCK", "0").toInt()));
+ 	currItem->setSizeLocked(static_cast<bool>(obj->attribute("LOCKR", "0").toInt()));
+ 	currItem->setFillTransparency(ScCLocale::toDoubleC(obj->attribute("TransValue"), 0.0));
+diff -r c3ee39dfbf00 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Jun 23 19:39:40 2013 +0200
+@@ -1290,6 +1290,14 @@
+ 	docu.writeAttribute("YPOS",item->yPos());
+ 	docu.writeAttribute("WIDTH",item->width());
+ 	docu.writeAttribute("HEIGHT",item->height());
++	docu.writeAttribute("HASSOFTSHADOW",item->hasSoftShadow ? 1 : 0);
++	docu.writeAttribute("SOFTSHADOWXOFFSET",item->softShadowXOffset);
++	docu.writeAttribute("SOFTSHADOWYOFFSET",item->softShadowYOffset);
++	docu.writeAttribute("SOFTSHADOWCOLOR",item->softShadowColor);
++	docu.writeAttribute("SOFTSHADOWBLURRADIUS",item->softShadowBlurRadius);
++	docu.writeAttribute("SOFTSHADOWDPI",item->softShadowDPI);
++	docu.writeAttribute("SOFTSHADOWBLENDMODE",item->softShadowBlendMode);
++	docu.writeAttribute("SOFTSHADOWOPACITY",item->softShadowOpacity);
+ 	docu.writeAttribute("RADRECT",item->cornerRadius());
+ 	docu.writeAttribute("FRTYPE", item->FrameType);
+ 	docu.writeAttribute("CLIPEDIT", item->ClipEdited ? 1 : 0);
+diff -r c3ee39dfbf00 Scribus/scribus/propertiespalette.cpp
+--- a/Scribus/scribus/propertiespalette.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/propertiespalette.cpp	Sun Jun 23 19:39:40 2013 +0200
+@@ -338,6 +338,78 @@
+ 	Layout44->setSpacing( 4 );
+ 	Layout44->setMargin( 5 );
+ 
++	SoftShadowGroup = new QGroupBox( "Soft Shadow", page );
++	SoftShadowGroupLayout = new QVBoxLayout( SoftShadowGroup );
++	hasSoftShadow = new QCheckBox( SoftShadowGroup );
++	hasSoftShadow->setText( "Object has a soft shadow" );
++	hasSoftShadow->setChecked( false );
++	SoftShadowGroupLayout->addWidget( hasSoftShadow );
++
++	SoftShadowOffsetLayout = new QHBoxLayout();
++	SoftShadowGroupLayout->addLayout(SoftShadowOffsetLayout);
++
++	softShadowXOffset = new ScrSpinBox( -3000, 3000, SoftShadowGroup, 0 );
++	softShadowXOffsetLabel = new QLabel( "dx:", SoftShadowGroup );
++	softShadowXOffsetLabel->setBuddy(softShadowXOffset);
++	SoftShadowOffsetLayout->addWidget(softShadowXOffsetLabel);
++	SoftShadowOffsetLayout->addWidget(softShadowXOffset);
++
++	softShadowYOffset = new ScrSpinBox( -3000, 3000, SoftShadowGroup, 0 );
++	softShadowYOffsetLabel = new QLabel( "dy:", SoftShadowGroup );
++	softShadowYOffsetLabel->setBuddy(softShadowYOffset);
++	SoftShadowOffsetLayout->addWidget(softShadowYOffsetLabel);
++	SoftShadowOffsetLayout->addWidget(softShadowYOffset);
++	
++	SoftShadowStyleLayout = new QHBoxLayout();
++	SoftShadowGroupLayout->addLayout(SoftShadowStyleLayout);
++	softShadowColor = new ColorCombo( false );
++	SoftShadowStyleLayout->addWidget(softShadowColor);
++	
++	softShadowBlurRadius = new ScrSpinBox( SoftShadowGroup, 0 );
++	softShadowBlurRadiusLabel = new QLabel( "Blur:", SoftShadowGroup );
++	softShadowBlurRadiusLabel->setBuddy(softShadowBlurRadius);
++	SoftShadowStyleLayout->addWidget(softShadowBlurRadiusLabel);
++	SoftShadowStyleLayout->addWidget(softShadowBlurRadius);
++
++	SoftShadowTransLayout = new QHBoxLayout();
++	SoftShadowGroupLayout->addLayout(SoftShadowTransLayout);
++	softShadowBlendMode = new ScComboBox( SoftShadowGroup );
++
++	softShadowBlendMode->clear();
++	softShadowBlendMode->addItem( tr("Normal"));
++	softShadowBlendMode->addItem( tr("Darken"));
++	softShadowBlendMode->addItem( tr("Lighten"));
++	softShadowBlendMode->addItem( tr("Multiply"));
++	softShadowBlendMode->addItem( tr("Screen"));
++	softShadowBlendMode->addItem( tr("Overlay"));
++	softShadowBlendMode->addItem( tr("Hard Light"));
++	softShadowBlendMode->addItem( tr("Soft Light"));
++	softShadowBlendMode->addItem( tr("Difference"));
++	softShadowBlendMode->addItem( tr("Exclusion"));
++	softShadowBlendMode->addItem( tr("Color Dodge"));
++	softShadowBlendMode->addItem( tr("Color Burn"));
++	softShadowBlendMode->addItem( tr("Hue"));
++	softShadowBlendMode->addItem( tr("Saturation"));
++	softShadowBlendMode->addItem( tr("Color"));
++
++	SoftShadowTransLayout->addWidget(softShadowBlendMode);
++	
++	softShadowOpacity = new ScrSpinBox( SoftShadowGroup, 0 );
++	softShadowOpacityLabel = new QLabel( "Opacity:", SoftShadowGroup );
++	softShadowOpacityLabel->setBuddy(softShadowOpacity);
++	softShadowOpacity->setMinimum(0);
++	softShadowOpacity->setMaximum(100);
++	softShadowOpacity->setSingleStep(10);
++	softShadowOpacity->setValue(70);
++
++
++	SoftShadowTransLayout->addWidget(softShadowOpacityLabel);
++	SoftShadowTransLayout->addWidget(softShadowOpacity);
++
++
++
++	pageLayout->addWidget( SoftShadowGroup );
++
+ 	DoGroup = new QToolButton( page );
+ 	DoGroup->setIcon(QIcon(loadIcon("group.png")));
+ 	Layout44->addWidget( DoGroup, 0, 0 );
+@@ -1504,6 +1576,13 @@
+ 	connect(Width, SIGNAL(valueChanged(double)), this, SLOT(NewW()));
+ 	connect(Height, SIGNAL(valueChanged(double)), this, SLOT(NewH()));
+ 	connect(Rotation, SIGNAL(valueChanged(double)), this, SLOT(setRotation()));
++	connect(hasSoftShadow, SIGNAL(clicked()), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowXOffset, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowYOffset, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowColor, SIGNAL(currentIndexChanged(int)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowBlurRadius, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowOpacity, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowBlendMode, SIGNAL(currentIndexChanged(int)), this, SLOT(ChangeSoftShadow()));
+ 	connect(RoundRect, SIGNAL(valueChanged(double)), this, SLOT(NewCornerRadius()));
+ 	connect(LineSp, SIGNAL(valueChanged(double)), this, SLOT(NewLineSpacing()));
+ 	connect(Size, SIGNAL(valueChanged(double)), this, SLOT(NewSize()));
+@@ -2181,6 +2260,13 @@
+ 	disconnect(Ypos, SIGNAL(valueChanged(double)), this, SLOT(NewY()));
+ 	disconnect(Width, SIGNAL(valueChanged(double)), this, SLOT(NewW()));
+ 	disconnect(Height, SIGNAL(valueChanged(double)), this, SLOT(NewH()));
++	disconnect(hasSoftShadow, SIGNAL(clicked()), this, SLOT(ChangeSoftShadow()));
++	disconnect(softShadowXOffset, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	disconnect(softShadowYOffset, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	disconnect(softShadowColor, SIGNAL(currentIndexChanged(int)), this, SLOT(ChangeSoftShadow()));
++	disconnect(softShadowBlurRadius, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	disconnect(softShadowOpacity, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	disconnect(softShadowBlendMode, SIGNAL(currentIndexChanged(int)), this, SLOT(ChangeSoftShadow()));
+ 	disconnect(Locked, SIGNAL(clicked()), this, SLOT(handleLock()));
+ 	disconnect(NoPrint, SIGNAL(clicked()), this, SLOT(handlePrint()));
+ 	disconnect(NoResize, SIGNAL(clicked()), this, SLOT(handleLockSize()));
+@@ -2201,6 +2287,7 @@
+ 	disconnect(DBottom, SIGNAL(valueChanged(double)), this, SLOT(NewTDist()));
+ 	setXY(i->xPos(), i->yPos());
+ 	setBH(i->width(), i->height());
++	setSoftShadow(i->hasSoftShadow, i->softShadowColor, i->softShadowXOffset, i->softShadowYOffset, i->softShadowBlurRadius, i->softShadowDPI, i->softShadowOpacity, i->softShadowBlendMode);
+ 	NoPrint->setChecked(!i->printEnabled());
+ 	setFlippedH(i->imageFlippedH());
+ 	setFlippedV(i->imageFlippedV());
+@@ -2220,6 +2307,13 @@
+ 	connect(Ypos, SIGNAL(valueChanged(double)), this, SLOT(NewY()));
+ 	connect(Width, SIGNAL(valueChanged(double)), this, SLOT(NewW()));
+ 	connect(Height, SIGNAL(valueChanged(double)), this, SLOT(NewH()));
++	connect(hasSoftShadow, SIGNAL(clicked()), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowXOffset, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowYOffset, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowColor, SIGNAL(currentIndexChanged(int)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowBlurRadius, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowOpacity, SIGNAL(valueChanged(double)), this, SLOT(ChangeSoftShadow()));
++	connect(softShadowBlendMode, SIGNAL(currentIndexChanged(int)), this, SLOT(ChangeSoftShadow()));
+ 	connect(Locked, SIGNAL(clicked()), this, SLOT(handleLock()));
+ 	connect(NoPrint, SIGNAL(clicked()), this, SLOT(handlePrint()));
+ 	connect(NoResize, SIGNAL(clicked()), this, SLOT(handleLockSize()));
+@@ -2694,6 +2788,9 @@
+     Ypos->setNewUnit( m_unitIndex );
+     Width->setNewUnit( m_unitIndex );
+     Height->setNewUnit( m_unitIndex );
++	softShadowXOffset->setNewUnit( m_unitIndex );
++	softShadowYOffset->setNewUnit( m_unitIndex );
++	softShadowBlurRadius->setNewUnit( m_unitIndex );
+     imageXOffsetSpinBox->setNewUnit( m_unitIndex );
+     imageYOffsetSpinBox->setNewUnit( m_unitIndex );
+     dGap->setNewUnit( m_unitIndex );
+@@ -2901,6 +2998,42 @@
+ 	HaveItem = tmp;
+ }
+ 
++void PropertiesPalette::setSoftShadow(bool has, QString color, double dx, double dy, double radius, double dpi, double opac, int blend)
++{
++	if (!m_ScMW || m_ScMW->scriptIsRunning())
++		return;
++	bool tmp = HaveItem;
++	HaveItem = false;
++	hasSoftShadow->setChecked(has);
++	softShadowXOffset->setValue(dx*m_unitRatio);
++	softShadowYOffset->setValue(dy*m_unitRatio);
++	softShadowBlurRadius->setValue(radius*m_unitRatio);
++	softShadowOpacity->setValue(round(100*opac));
++	softShadowBlendMode->setCurrentIndex(blend);
++
++	ColorList::Iterator it;
++	int c = 0;
++	if ((color != CommonStrings::None) && (!color.isEmpty()))
++	{
++		c++;
++		for (it = doc->PageColors.begin(); it != doc->PageColors.end(); ++it)
++		{
++			if (it.key() == color)
++				break;
++			c++;
++		}
++	}
++	softShadowColor->setCurrentIndex(c);
++
++	softShadowXOffset->setEnabled(has);
++	softShadowYOffset->setEnabled(has);
++	softShadowColor->setEnabled(has);
++	softShadowBlurRadius->setEnabled(has);
++	softShadowOpacity->setEnabled(has);
++	softShadowBlendMode->setEnabled(has);
++
++	HaveItem = tmp;
++}
+ void PropertiesPalette::setRR(double r)
+ {
+ 	if (!m_ScMW || m_ScMW->scriptIsRunning())
+@@ -3461,6 +3594,23 @@
+ 		CurItem->asTextFrame()->updateUndo(CurItem->HasSel? PageItem::PARAMSEL : PageItem::PARAMFULL);
+ }
+ 
++void PropertiesPalette::ChangeSoftShadow()
++{
++	if (!HaveDoc || !HaveItem || !m_ScMW || m_ScMW->scriptIsRunning())
++		return;
++	HaveItem=false;
++	doc->itemSelection_SetSoftShadow(hasSoftShadow->isChecked(),softShadowColor->currentColor(),
++					softShadowXOffset->value()/m_unitRatio,softShadowYOffset->value()/m_unitRatio,
++					softShadowBlurRadius->value()/m_unitRatio,300,softShadowOpacity->value()/100.0,softShadowBlendMode->currentIndex());
++	softShadowXOffset->setEnabled(hasSoftShadow->isChecked());
++	softShadowYOffset->setEnabled(hasSoftShadow->isChecked());
++	softShadowColor->setEnabled(hasSoftShadow->isChecked());
++	softShadowBlurRadius->setEnabled(hasSoftShadow->isChecked());
++	softShadowOpacity->setEnabled(hasSoftShadow->isChecked());
++	softShadowBlendMode->setEnabled(hasSoftShadow->isChecked());
++	HaveItem=true;
++}
++
+ void PropertiesPalette::NewX()
+ {
+ 	if (!m_ScMW || m_ScMW->scriptIsRunning())
+@@ -4794,6 +4944,8 @@
+ 	TxStroke->updateBox(doc->PageColors, ColorCombo::fancyPixmaps, false);
+ 	TxFill->view()->setMinimumWidth(TxFill->view()->maximumViewportSize().width() + 24);
+ 	TxStroke->view()->setMinimumWidth(TxStroke->view()->maximumViewportSize().width() + 24);
++	softShadowColor->updateBox(doc->PageColors, ColorCombo::smallPixmaps, true);
++	softShadowColor->view()->setMinimumWidth(softShadowColor->view()->maximumViewportSize().width() + 24);
+ }
+ 
+ void PropertiesPalette::updateCmsList()
+@@ -5483,6 +5635,10 @@
+ 	LSize->setSpecialValueText( tr("Hairline"));
+ 	Xpos->setSuffix(ein);
+ 	Ypos->setSuffix(ein);
++	softShadowXOffset->setSuffix(ein);
++	softShadowYOffset->setSuffix(ein);
++	softShadowBlurRadius->setSuffix(ein);
++	softShadowOpacity->setSuffix(" %");
+ 	Width->setSuffix(ein);
+ 	Height->setSuffix(ein);
+ 	imageXOffsetSpinBox->setSuffix(ein);
+diff -r c3ee39dfbf00 Scribus/scribus/propertiespalette.h
+--- a/Scribus/scribus/propertiespalette.h	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/propertiespalette.h	Sun Jun 23 19:39:40 2013 +0200
+@@ -191,6 +191,7 @@
+ 	void setBH(double x, double y);
+ 	void setR(double r);
+ 	void setRR(double r);
++	void setSoftShadow(bool has, QString color, double dx, double dy, double radius, double dpi, double opac, int blend);
+ 	void setCols(int r, double g);
+ // 	void setLspMode(QAction *);
+ 	void setLineSpacingMode(int id);
+@@ -253,6 +254,7 @@
+ 	void NewW();
+ 	void NewH();
+ 	void setRotation();
++	void ChangeSoftShadow();
+ 	void NewCornerRadius();
+ 	void NewLineSpacing();
+ 	void HandleGapSwitch();
+@@ -369,6 +371,10 @@
+ 	QGridLayout* Layout12_2;
+ 	QGridLayout* imagePageNumberSelector; 
+ 	QHBoxLayout* NameGroupLayout;
++	QVBoxLayout* SoftShadowGroupLayout;
++	QHBoxLayout* SoftShadowOffsetLayout;
++	QHBoxLayout* SoftShadowStyleLayout;
++	QHBoxLayout* SoftShadowTransLayout;
+ 	QGridLayout* GeoGroupLayout;
+ 	QGridLayout* LayerGroupLayout;
+ 	QHBoxLayout* ShapeGroupLayout;
+@@ -410,6 +416,10 @@
+ 	QLabel* heightLabel;
+ 	QLabel* rotationLabel;
+ 	QLabel* basepointLabel;
++	QLabel* softShadowXOffsetLabel;
++	QLabel* softShadowYOffsetLabel;
++	QLabel* softShadowBlurRadiusLabel;
++	QLabel* softShadowOpacityLabel;
+ 	QLabel* LevelTxt;
+ 	QLabel* SRect;
+ 	QLabel* SRect2;
+@@ -502,6 +512,7 @@
+ 	QGroupBox* NameGroup;
+ 	QGroupBox* GeoGroup;
+ 	QGroupBox* LayerGroup;
++	QGroupBox* SoftShadowGroup;
+ 	QFrame* GroupBoxCM;
+ 	QGroupBox* TLines;
+ 	QGroupBox* GroupBox3a;
+@@ -517,6 +528,7 @@
+ 	QToolButton* textFlowUsesBoundingBox2;
+ 	QToolButton* textFlowUsesContourLine2;
+ 	QToolButton* textFlowUsesImageClipping2;
++	QCheckBox* hasSoftShadow;
+ 	QCheckBox* Aspect;
+ 	QCheckBox* flippedPathText;
+ 	QCheckBox* showcurveCheckBox;
+@@ -535,7 +547,9 @@
+ 	QComboBox* LJoinStyle;
+ 	QComboBox* LEndStyle;
+ 	ColorCombo* TxFill;
++	ColorCombo* softShadowColor;
+ 	ScComboBox* blendMode;
++	ScComboBox* softShadowBlendMode;
+ //	QComboBox *optMarginCombo;
+ 	QRadioButton *optMarginRadioNone;
+ 	QRadioButton *optMarginRadioBoth;
+@@ -550,6 +564,10 @@
+ 	ScrSpinBox* Ypos;
+ 	ScrSpinBox* Height;
+ 	ScrSpinBox* Rotation;
++	ScrSpinBox* softShadowXOffset;
++	ScrSpinBox* softShadowYOffset;
++	ScrSpinBox* softShadowBlurRadius;
++	ScrSpinBox* softShadowOpacity;
+ 	ScrSpinBox* RoundRect;
+ 	ScrSpinBox* dGap;
+ 	ScrSpinBox* DTop;
+diff -r c3ee39dfbf00 Scribus/scribus/scribusdoc.cpp
+--- a/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 19:39:40 2013 +0200
+@@ -5592,7 +5592,27 @@
+ 	return false;
+ }
+ 
+-
++void ScribusDoc::itemSelection_SetSoftShadow(bool has, QString color, double dx, double dy, double radius, double dpi, double opac, int blend)
++{
++	uint selectedItemCount=m_Selection->count();
++	if (selectedItemCount != 0)
++	{
++		for (uint a = 0; a < 1; ++a) //selectedItemCount; ++a)
++		{
++			m_Selection->itemAt(a)->hasSoftShadow=has;
++			m_Selection->itemAt(a)->softShadowColor=color;
++			m_Selection->itemAt(a)->softShadowXOffset=dx;
++			m_Selection->itemAt(a)->softShadowYOffset=dy;
++			m_Selection->itemAt(a)->softShadowBlurRadius=radius;
++			m_Selection->itemAt(a)->softShadowDPI=dpi;
++			m_Selection->itemAt(a)->softShadowOpacity=opac;
++			m_Selection->itemAt(a)->softShadowBlendMode=blend;
++			m_Selection->itemAt(a)->update();
++		}
++	}
++	changed();
++
++}
+ 
+ void ScribusDoc::itemSelection_SetLineWidth(double w)
+ {
+diff -r c3ee39dfbf00 Scribus/scribus/scribusdoc.h
+--- a/Scribus/scribus/scribusdoc.h	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/scribusdoc.h	Sun Jun 23 19:39:40 2013 +0200
+@@ -835,6 +835,8 @@
+ 	void itemSelection_SetNamedCharStyle(const QString & name, Selection* customSelection=0);
+ 	void itemSelection_SetNamedLineStyle(const QString & name, Selection* customSelection=0);
+ 
++	void itemSelection_SetSoftShadow(bool has, QString color, double dx, double dy, double radius, double dpi, double opac, int blend);
++
+ 	void itemSelection_SetLineWidth(double w);
+ 	void itemSelection_SetLineArt(Qt::PenStyle w);
+ 	void itemSelection_SetLineJoin(Qt::PenJoinStyle w);
