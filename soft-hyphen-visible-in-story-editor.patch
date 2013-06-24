@@ -1,9 +1,10 @@
 # HG changeset patch
 # Parent eec776d37d582089eb3a8f76cd9435c590f949e1
+make soft hyphen visible in story editor as a red dash
 
 diff -r eec776d37d58 Scribus/scribus/storyeditor.cpp
 --- a/Scribus/scribus/storyeditor.cpp	Sun Jun 23 14:30:39 2013 +0000
-+++ b/Scribus/scribus/storyeditor.cpp	Sun Jun 23 18:37:28 2013 +0200
++++ b/Scribus/scribus/storyeditor.cpp	Mon Jun 24 08:50:11 2013 +0200
 @@ -412,7 +412,14 @@
  				{
  					if (conv < 31)

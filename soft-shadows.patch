@@ -1,9 +1,10 @@
 # HG changeset patch
-# Parent c3ee39dfbf0090172aa5720a2838ee7d0d914b16
+# Parent 524a0e9584d65bdda036bfa972591ad75dfa41fe
+ability to add soft shadows to objects (visible in PDF export only)
 
-diff -r c3ee39dfbf00 Scribus/scribus/documentchecker.cpp
---- a/Scribus/scribus/documentchecker.cpp	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/documentchecker.cpp	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/documentchecker.cpp
+--- a/Scribus/scribus/documentchecker.cpp	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/documentchecker.cpp	Mon Jun 24 08:52:07 2013 +0200
 @@ -89,7 +89,7 @@
  		itemError.clear();
  		if (((currItem->isAnnotation()) || (currItem->isBookmark)) && (checkerSettings.checkAnnotations))
@@ -22,9 +23,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/documentchecker.cpp
  			itemError.insert(Transparency, 0);
  		if ((currItem->GrType != 0) && (checkerSettings.checkTransparency))
  		{
-diff -r c3ee39dfbf00 Scribus/scribus/pageitem.cpp
---- a/Scribus/scribus/pageitem.cpp	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/pageitem.cpp	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/pageitem.cpp
+--- a/Scribus/scribus/pageitem.cpp	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/pageitem.cpp	Mon Jun 24 08:52:07 2013 +0200
 @@ -160,6 +160,14 @@
  	fill_gradient(other.fill_gradient),
  	fillRule(other.fillRule),
@@ -103,9 +104,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/pageitem.cpp
  	QStack<PageItem*> groupStack;
  	for (int em = 0; em < emG.count(); ++em)
  	{
-diff -r c3ee39dfbf00 Scribus/scribus/pageitem.h
---- a/Scribus/scribus/pageitem.h	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/pageitem.h	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/pageitem.h
+--- a/Scribus/scribus/pageitem.h	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/pageitem.h	Mon Jun 24 08:52:07 2013 +0200
 @@ -284,6 +284,8 @@
  	virtual void DrawObj_Post(ScPainter *p);
  	virtual void DrawObj_Item(ScPainter *p, QRectF e, double sc) = 0;
@@ -146,9 +147,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/pageitem.h
  	// rect / oval / round / other
  	int frameType() const { return FrameType; }
  	void setFrameType(int val) { FrameType = val; }
-diff -r c3ee39dfbf00 Scribus/scribus/pageitem_desaxe.cpp
---- a/Scribus/scribus/pageitem_desaxe.cpp	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/pageitem_desaxe.cpp	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/pageitem_desaxe.cpp
+--- a/Scribus/scribus/pageitem_desaxe.cpp	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/pageitem_desaxe.cpp	Mon Jun 24 08:52:07 2013 +0200
 @@ -82,6 +82,15 @@
  	result.insert("fill-evenodd", toXMLString(item->fillEvenOdd()));
  	result.insert("do-overprint", toXMLString(item->overprint()));
@@ -181,9 +182,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/pageitem_desaxe.cpp
  	ruleset.addRule(itemPrefix, SetAttribute<PageItem,const QString&>( & PageItem::setLineColor, "line-color", dummy ));  // also in createPageItem()
  	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setLineShade, "line-shade", &parseDouble ));
  	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setLineTransparency, "line-transparency", &parseDouble ));
-diff -r c3ee39dfbf00 Scribus/scribus/pdflib_core.cpp
---- a/Scribus/scribus/pdflib_core.cpp	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/pdflib_core.cpp	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/pdflib_core.cpp
+--- a/Scribus/scribus/pdflib_core.cpp	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/pdflib_core.cpp	Mon Jun 24 08:52:07 2013 +0200
 @@ -2847,6 +2847,7 @@
  				QString grcon = "";
  				if (ite->isGroupControl)
@@ -323,9 +324,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/pdflib_core.cpp
  	ite->setRedrawBounding();
  	double bLeft, bRight, bBottom, bTop;
  	getBleeds(pag, bLeft, bRight, bBottom, bTop);
-diff -r c3ee39dfbf00 Scribus/scribus/pdflib_core.h
---- a/Scribus/scribus/pdflib_core.h	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/pdflib_core.h	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/pdflib_core.h
+--- a/Scribus/scribus/pdflib_core.h	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/pdflib_core.h	Mon Jun 24 08:52:07 2013 +0200
 @@ -145,6 +145,7 @@
  	QByteArray ComputeRC4Key(int ObjNum);
  	
@@ -334,9 +335,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/pdflib_core.h
  	QString PDF_ProcessTableItem(PageItem* ite, const Page* pag);
  	QString drawArrow(PageItem *ite, QMatrix &arrowTrans, int arrowIndex);
  	void    PDF_Bookmark(PageItem *currItem, double ypos);
-diff -r c3ee39dfbf00 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp
---- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Mon Jun 24 08:52:07 2013 +0200
 @@ -2520,6 +2520,15 @@
  		currItem->setTextFlowMode(PageItem::TextFlowDisabled);
  	currItem->DashOffset = ScCLocale::toDoubleC( obj->attribute("DASHOFF"), 0.0);
@@ -353,9 +354,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/plugins/fileloader/scribus134format/scribus
  	currItem->setLocked(static_cast<bool>(obj->attribute("LOCK", "0").toInt()));
  	currItem->setSizeLocked(static_cast<bool>(obj->attribute("LOCKR", "0").toInt()));
  	currItem->setFillTransparency(ScCLocale::toDoubleC(obj->attribute("TransValue"), 0.0));
-diff -r c3ee39dfbf00 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp
---- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Mon Jun 24 08:52:07 2013 +0200
 @@ -1290,6 +1290,14 @@
  	docu.writeAttribute("YPOS",item->yPos());
  	docu.writeAttribute("WIDTH",item->width());
@@ -371,9 +372,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/plugins/fileloader/scribus134format/scribus
  	docu.writeAttribute("RADRECT",item->cornerRadius());
  	docu.writeAttribute("FRTYPE", item->FrameType);
  	docu.writeAttribute("CLIPEDIT", item->ClipEdited ? 1 : 0);
-diff -r c3ee39dfbf00 Scribus/scribus/propertiespalette.cpp
---- a/Scribus/scribus/propertiespalette.cpp	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/propertiespalette.cpp	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/propertiespalette.cpp
+--- a/Scribus/scribus/propertiespalette.cpp	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/propertiespalette.cpp	Mon Jun 24 08:52:07 2013 +0200
 @@ -338,6 +338,78 @@
  	Layout44->setSpacing( 4 );
  	Layout44->setMargin( 5 );
@@ -600,9 +601,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/propertiespalette.cpp
  	Width->setSuffix(ein);
  	Height->setSuffix(ein);
  	imageXOffsetSpinBox->setSuffix(ein);
-diff -r c3ee39dfbf00 Scribus/scribus/propertiespalette.h
---- a/Scribus/scribus/propertiespalette.h	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/propertiespalette.h	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/propertiespalette.h
+--- a/Scribus/scribus/propertiespalette.h	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/propertiespalette.h	Mon Jun 24 08:52:07 2013 +0200
 @@ -191,6 +191,7 @@
  	void setBH(double x, double y);
  	void setR(double r);
@@ -678,9 +679,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/propertiespalette.h
  	ScrSpinBox* RoundRect;
  	ScrSpinBox* dGap;
  	ScrSpinBox* DTop;
-diff -r c3ee39dfbf00 Scribus/scribus/scribusdoc.cpp
---- a/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/scribusdoc.cpp
+--- a/Scribus/scribus/scribusdoc.cpp	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/scribusdoc.cpp	Mon Jun 24 08:52:07 2013 +0200
 @@ -5592,7 +5592,27 @@
  	return false;
  }
@@ -710,9 +711,9 @@ diff -r c3ee39dfbf00 Scribus/scribus/scribusdoc.cpp
  
  void ScribusDoc::itemSelection_SetLineWidth(double w)
  {
-diff -r c3ee39dfbf00 Scribus/scribus/scribusdoc.h
---- a/Scribus/scribus/scribusdoc.h	Sun Jun 23 18:37:28 2013 +0200
-+++ b/Scribus/scribus/scribusdoc.h	Sun Jun 23 19:39:40 2013 +0200
+diff -r 524a0e9584d6 Scribus/scribus/scribusdoc.h
+--- a/Scribus/scribus/scribusdoc.h	Mon Jun 24 08:50:11 2013 +0200
++++ b/Scribus/scribus/scribusdoc.h	Mon Jun 24 08:52:07 2013 +0200
 @@ -835,6 +835,8 @@
  	void itemSelection_SetNamedCharStyle(const QString & name, Selection* customSelection=0);
  	void itemSelection_SetNamedLineStyle(const QString & name, Selection* customSelection=0);

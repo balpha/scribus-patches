@@ -1,9 +1,10 @@
 # HG changeset patch
-# Parent b1f892fc03bf2db78cde4f507d8a82d6b2fc6573
+# Parent f999ece5da91d9d98c4ffb30325db64192ba4f97
+Add a new layer property, setting text on the layer to flow around *all* flow-enabled objects that are on flow-enabled layers above *or below* the text layer
 
-diff -r b1f892fc03bf Scribus/scribus/layers.cpp
---- a/Scribus/scribus/layers.cpp	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/layers.cpp	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/layers.cpp
+--- a/Scribus/scribus/layers.cpp	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/layers.cpp	Mon Jun 24 08:52:59 2013 +0200
 @@ -62,14 +62,15 @@
  	layout1->addWidget( opacitySpinBox );
  	LayerPaletteLayout->addLayout( layout1 );
@@ -143,9 +144,9 @@ diff -r b1f892fc03bf Scribus/scribus/layers.cpp
  }
  
  
-diff -r b1f892fc03bf Scribus/scribus/layers.h
---- a/Scribus/scribus/layers.h	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/layers.h	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/layers.h
+--- a/Scribus/scribus/layers.h	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/layers.h	Mon Jun 24 08:52:59 2013 +0200
 @@ -55,6 +55,7 @@
  	void printLayer();
  	void lockLayer();
@@ -154,9 +155,9 @@ diff -r b1f892fc03bf Scribus/scribus/layers.h
  	void outlineToggleLayer();
  	void toggleAllfromHeader(int index);
  	void markLayer();
-diff -r b1f892fc03bf Scribus/scribus/pageitem_textframe.cpp
---- a/Scribus/scribus/pageitem_textframe.cpp	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/pageitem_textframe.cpp	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/pageitem_textframe.cpp
+--- a/Scribus/scribus/pageitem_textframe.cpp	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/pageitem_textframe.cpp	Mon Jun 24 08:52:59 2013 +0200
 @@ -151,7 +151,7 @@
  				if (docItem->OnMasterPage != OnMasterPage)
  					continue;
@@ -175,9 +176,9 @@ diff -r b1f892fc03bf Scribus/scribus/pageitem_textframe.cpp
  				{
  					if (docItem->Groups.count() == 0)
  						currentGroup = -1;
-diff -r b1f892fc03bf Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp
---- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Mon Jun 24 08:52:59 2013 +0200
 @@ -567,6 +567,7 @@
  				la.isPrintable  = pg.attribute("DRUCKEN").toInt();
  				la.isEditable   = pg.attribute("EDIT", "1").toInt();
@@ -194,9 +195,9 @@ diff -r b1f892fc03bf Scribus/scribus/plugins/fileloader/scribus134format/scribus
  				la.transparency = ScCLocale::toDoubleC( pg.attribute("TRANS"), 1.0);
  				la.blendMode    = pg.attribute("BLEND", "0").toInt();
  				la.outlineMode  = pg.attribute("OUTL", "0").toInt();
-diff -r b1f892fc03bf Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp
---- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Mon Jun 24 08:52:59 2013 +0200
 @@ -603,6 +603,7 @@
  		docu.writeAttribute("DRUCKEN", static_cast<int>(m_Doc->Layers[lay].isPrintable));
  		docu.writeAttribute("EDIT", static_cast<int>(m_Doc->Layers[lay].isEditable));
@@ -205,9 +206,9 @@ diff -r b1f892fc03bf Scribus/scribus/plugins/fileloader/scribus134format/scribus
  		docu.writeAttribute("TRANS", m_Doc->Layers[lay].transparency);
  		docu.writeAttribute("BLEND", m_Doc->Layers[lay].blendMode);
  		docu.writeAttribute("OUTL", static_cast<int>(m_Doc->Layers[lay].outlineMode));
-diff -r b1f892fc03bf Scribus/scribus/sclayer.cpp
---- a/Scribus/scribus/sclayer.cpp	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/sclayer.cpp	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/sclayer.cpp
+--- a/Scribus/scribus/sclayer.cpp	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/sclayer.cpp	Mon Jun 24 08:52:59 2013 +0200
 @@ -19,7 +19,8 @@
  	isPrintable  = true;
  	isViewable   = true;
@@ -273,9 +274,9 @@ diff -r b1f892fc03bf Scribus/scribus/sclayer.cpp
  
  bool ScLayers::layerOutline(const int layerNumber) const
  {
-diff -r b1f892fc03bf Scribus/scribus/sclayer.h
---- a/Scribus/scribus/sclayer.h	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/sclayer.h	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/sclayer.h
+--- a/Scribus/scribus/sclayer.h	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/sclayer.h	Mon Jun 24 08:52:59 2013 +0200
 @@ -25,7 +25,8 @@
  	bool    isPrintable;
  	bool    isViewable;
@@ -297,9 +298,9 @@ diff -r b1f892fc03bf Scribus/scribus/sclayer.h
  
  	/**
  	 * @brief Set the layer flow via the layer number
-diff -r b1f892fc03bf Scribus/scribus/scribusdoc.cpp
---- a/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/scribusdoc.cpp	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/scribusdoc.cpp
+--- a/Scribus/scribus/scribusdoc.cpp	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/scribusdoc.cpp	Mon Jun 24 08:52:59 2013 +0200
 @@ -2399,6 +2399,37 @@
  	return false;
  }
@@ -338,9 +339,9 @@ diff -r b1f892fc03bf Scribus/scribus/scribusdoc.cpp
  
  bool ScribusDoc::setLayerTransparency(const int layerNumber, double trans)
  {
-diff -r b1f892fc03bf Scribus/scribus/scribusdoc.h
---- a/Scribus/scribus/scribusdoc.h	Sun Jun 23 19:49:22 2013 +0200
-+++ b/Scribus/scribus/scribusdoc.h	Sun Jun 23 20:18:26 2013 +0200
+diff -r f999ece5da91 Scribus/scribus/scribusdoc.h
+--- a/Scribus/scribus/scribusdoc.h	Mon Jun 24 08:52:30 2013 +0200
++++ b/Scribus/scribus/scribusdoc.h	Mon Jun 24 08:52:59 2013 +0200
 @@ -292,6 +292,10 @@
  	 * @return flow or not
  	 */
