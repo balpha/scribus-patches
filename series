@@ -3,3 +3,4 @@ soft-shadows.patch
 object-belongs-to-the-page-that-has-its-center.patch
 layer-option-text-always-flows.patch
 swap-pages.patch
+prepend-soft-hyphen-to-disable-hyphenation.patch

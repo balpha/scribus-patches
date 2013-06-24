@@ -1,0 +1,23 @@
+# HG changeset patch
+# Parent 744b9f95317975bd9d42aae8cb7ee1a84576a7b8
+ability to disable hyphenation on a per-word basis by prepending the word with a soft hyphen
+
+diff -r 744b9f953179 Scribus/scribus/hyphenator.cpp
+--- a/Scribus/scribus/hyphenator.cpp	Mon Jun 24 08:53:15 2013 +0200
++++ b/Scribus/scribus/hyphenator.cpp	Mon Jun 24 09:04:41 2013 +0200
+@@ -229,6 +229,7 @@
+ 	qApp->changeOverrideCursor(QCursor(Qt::WaitCursor));
+ 	QRegExp wordBoundary("\\w");
+ 	QRegExp whiteSpace("\\s|\\W|\\d|\\n|\\r|\\t");
++	QRegExp realWhiteSpace("\\s"); //EMXIF
+ 	while ((firstC+Ccount < signed(text.length())) && (firstC != -1) && 
+ 			(lastC < signed(text.length())))
+ 	{
+@@ -238,6 +239,7 @@
+ 		if (firstC > 0 && text.at(firstC-1) == SpecialChars::SHYPHEN)
+ 		{
+ 			Ccount = 1;
++			firstC = text.indexOf(realWhiteSpace, firstC); // don't hyphenate if word starts with SHYPHEN
+ 			continue;
+ 		}
+ 		lastC = text.indexOf(whiteSpace, firstC);
