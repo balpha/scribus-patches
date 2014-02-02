@@ -1,0 +1,191 @@
+# HG changeset patch
+# Parent a831564f874eeb2ebe9acf2e6680113e58a1492d
+display soft shadows in the UI
+
+diff -r a831564f874e -r a1b2440f34d8 Scribus/scribus/canvas.cpp
+--- a/Scribus/scribus/canvas.cpp	Sat Feb 01 09:12:01 2014 +0100
++++ b/Scribus/scribus/canvas.cpp	Sun Feb 02 11:09:26 2014 +0100
+@@ -1547,6 +1547,7 @@
+ 					}
+ 					if (currItem->isGroupControl)
+ 					{
++						currItem->DrawObj_SoftShadow(painter);
+ 						painter->save();
+ 						FPointArray cl = currItem->PoLine.copy();
+ 						QMatrix mm;
+@@ -1570,6 +1571,7 @@
+ 						else if(m_viewMode.operItemSelecting)
+ 						{
+ 							currItem->invalid = false;
++							currItem->DrawObj_SoftShadow(painter);
+ 							currItem->DrawObj(painter, cullingArea);
+ 						}
+ 						else
+@@ -1578,6 +1580,7 @@
+ 							// alter the "data". And it really prevents optimisation - pm
+ // 							if (m_viewMode.forceRedraw)
+ // 								currItem->invalidateLayout();
++							currItem->DrawObj_SoftShadow(painter);
+ 							currItem->DrawObj(painter, cullingArea);
+ 						}
+ //						currItem->Redrawn = true;
+diff -r a831564f874e -r a1b2440f34d8 Scribus/scribus/pageitem.cpp
+--- a/Scribus/scribus/pageitem.cpp	Sat Feb 01 09:12:01 2014 +0100
++++ b/Scribus/scribus/pageitem.cpp	Sun Feb 02 11:09:26 2014 +0100
+@@ -168,6 +168,8 @@
+ 	softShadowDPI(other.softShadowDPI),
+ 	softShadowOpacity(other.softShadowOpacity),
+ 	softShadowBlendMode(other.softShadowBlendMode),
++	softShadowDisplayed(other.softShadowDisplayed),
++
+ 	LeftLink(other.LeftLink),
+ 	RightLink(other.RightLink),
+ 	TopLink(other.TopLink),
+@@ -316,6 +318,7 @@
+ 	softShadowDPI=300.0;
+ 	softShadowOpacity=0.7;
+ 	softShadowBlendMode=0;
++	softShadowDisplayed = ScImage();
+ 
+ 	BoundingX = x;
+ 	BoundingY = y;
+@@ -644,6 +647,7 @@
+ {
+ 	Rot=newRotation;
+ 	checkChanges();
++	softShadowDisplayed.imgInfo.valid=false;
+ 	if (drawingOnly || m_Doc->isLoading())
+ 		return;
+ 	emit rotation(Rot);
+@@ -655,6 +659,7 @@
+ 		return;
+ 	Rot+=dR;
+ 	checkChanges();
++	softShadowDisplayed.imgInfo.valid=false;
+ 	emit rotation(Rot);
+ }
+ 
+@@ -1044,7 +1049,6 @@
+ 
+ 
+ 
+-
+ /** Paints the item.
+     CHANGE: cullingArea is in doc coordinates!
+  */
+@@ -1077,6 +1081,58 @@
+ 	DrawObj_Post(p);
+ }
+ 
++void PageItem::DrawObj_SoftShadow(ScPainter *p)
++{
++	if (!hasSoftShadow || softShadowColor == CommonStrings::None)
++		return;
++	double localSc = 3.0;
++	p->save();
++	QRectF rect = getVisualBoundingRect();
++	p->translate(rect.left(), rect.top());
++
++	p->translate(softShadowXOffset-softShadowBlurRadius, softShadowYOffset-softShadowBlurRadius);
++	if (!softShadowDisplayed.imgInfo.valid)
++	{
++		QImage imgC = DrawObj_toImage_withScale(localSc, !isGroupControl);
++		imgC = imgC.copy(-softShadowBlurRadius*localSc,-softShadowBlurRadius*localSc,imgC.width()+2*softShadowBlurRadius*localSc,imgC.height()+2*softShadowBlurRadius*localSc); // Add border
++
++		ScImage img = imgC;
++		if (softShadowBlurRadius > 0)
++		{
++			ImageEffect eff;
++			ScImageEffectList el;
++			eff.effectCode = ScImage::EF_BLUR;
++			eff.effectParameters = QString("%1 1.0").arg(softShadowBlurRadius*localSc);
++			el.append(eff);
++			img.applyEffect(el,doc()->PageColors,false);
++		}
++		QPainter painter(img.qImagePtr());
++		painter.setCompositionMode(QPainter::QPainter::CompositionMode_SourceIn);
++		const ScColor& col = m_Doc->PageColors[softShadowColor];
++		QColor fillQColor = ScColorEngine::getShadeColorProof(col, m_Doc, fillShadeVal);
++
++		if ((m_Doc->view()) && (m_Doc->view()->m_canvas->usePreviewVisual()))
++		{
++			VisionDefectColor defect;
++			fillQColor = defect.convertDefect(fillQColor, m_Doc->view()->m_canvas->previewVisual());
++		}
++		painter.fillRect(img.qImagePtr()->rect(), fillQColor);
++		softShadowDisplayed = img;
++		softShadowDisplayed.imgInfo.valid = true;
++	}
++	if (softShadowBlendMode != 0 || softShadowOpacity != 1)
++	{
++		p->beginLayer(softShadowOpacity, softShadowBlendMode);
++	}
++	p->scale(1/localSc, 1/localSc);
++	p->drawImage(softShadowDisplayed.qImagePtr());
++	if (softShadowBlendMode != 0 || softShadowOpacity != 1)
++	{
++		p->endLayer();
++	}
++	p->restore();
++}
++
+ void PageItem::DrawObj_Pre(ScPainter *p, double &sc)
+ {
+ 	ScribusView* view = m_Doc->view();
+@@ -4896,6 +4952,13 @@
+ 		FPoint maxAr = getMaxClipF(&arrow);
+ 		totalRect = totalRect.united(QRectF(QPointF(minAr.x(), minAr.y()), QPointF(maxAr.x(), maxAr.y())));
+ 	}
++	if (hasSoftShadow) {
++		QRectF shadowRect = totalRect;
++		shadowRect.translate(softShadowXOffset - softShadowBlurRadius, softShadowYOffset - softShadowBlurRadius);
++		shadowRect.setWidth(shadowRect.width() + 2*softShadowBlurRadius);
++		shadowRect.setHeight(shadowRect.height() + 2*softShadowBlurRadius);
++		totalRect = totalRect.united(shadowRect);
++	}
+ 
+ 	qreal rx1, ry1, rx2, ry2;
+ 	totalRect.getCoords(&rx1, &ry1, &rx2, &ry2);
+diff -r a831564f874e -r a1b2440f34d8 Scribus/scribus/pageitem.h
+--- a/Scribus/scribus/pageitem.h	Sat Feb 01 09:12:01 2014 +0100
++++ b/Scribus/scribus/pageitem.h	Sun Feb 02 11:09:26 2014 +0100
+@@ -280,6 +280,7 @@
+   /** Zeichnet das Item */
+ 	void paintObj(QPainter *p);
+ 	void DrawObj(ScPainter *p, QRectF e);
++	void DrawObj_SoftShadow(ScPainter *p);
+ 	void DrawObj_Pre(ScPainter *p, double &sc);
+ 	virtual void DrawObj_Post(ScPainter *p);
+ 	virtual void DrawObj_Item(ScPainter *p, QRectF e, double sc) = 0;
+@@ -339,9 +340,9 @@
+ 	virtual void handleModeEditKey(QKeyEvent *k, bool &keyRepeat);
+ 	
+ 	/// invalidates current layout information
+-	virtual void invalidateLayout() { invalid = true; }
++	virtual void invalidateLayout() { invalid = true; softShadowDisplayed.imgInfo.valid=false; }
+ 	/// creates valid layout information
+-	virtual void layout() {}
++	virtual void layout() { }
+ 	/// returns frame where is text end
+ 	PageItem * frameTextEnd();
+ 	/// returns true if text overflows
+@@ -543,6 +544,8 @@
+ 	double softShadowDPI;
+ 	double softShadowOpacity;
+ 	int softShadowBlendMode;
++	ScImage softShadowDisplayed;
++
+ /* Additions for Table Support */
+ 	PageItem* LeftLink;
+ 	PageItem* RightLink;
+diff -r a831564f874e -r a1b2440f34d8 Scribus/scribus/pageitem_textframe.cpp
+--- a/Scribus/scribus/pageitem_textframe.cpp	Sat Feb 01 09:12:01 2014 +0100
++++ b/Scribus/scribus/pageitem_textframe.cpp	Sun Feb 02 11:09:26 2014 +0100
+@@ -2541,6 +2541,7 @@
+ {
+ 	const bool wholeChain = true;
+ 	this->invalid = true;
++	this->softShadowDisplayed.imgInfo.valid=false; 
+ 	if (wholeChain)
+ 	{
+ 		PageItem *prevFrame = this->prevInChain();

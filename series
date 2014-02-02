@@ -1,5 +1,6 @@
 soft-hyphen-visible-in-story-editor.patch
 soft-shadows.patch
+soft-shadows-in-ui.patch
 object-belongs-to-the-page-that-has-its-center.patch
 layer-option-text-always-flows.patch
 swap-pages.patch
