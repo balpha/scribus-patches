@@ -44,7 +44,7 @@ diff -r a831564f874e -r a1b2440f34d8 Scribus/scribus/pageitem.cpp
 @@ -316,6 +318,7 @@
  	softShadowDPI=300.0;
  	softShadowOpacity=0.7;
- 	softShadowBlendMode=0;
+ 	softShadowBlendMode=3;
 +	softShadowDisplayed = ScImage();
  
  	BoundingX = x;
