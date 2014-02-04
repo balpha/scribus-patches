@@ -1,0 +1,211 @@
+# HG changeset patch
+# Parent a151b71c3ca54d8b6a8cab06867700110bb85bde
+ability to set an image's rotation inside the frame in 90 degree steps
+
+diff -r a151b71c3ca5 Scribus/scribus/pageitem.h
+--- a/Scribus/scribus/pageitem.h	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/pageitem.h	Tue Feb 04 12:43:34 2014 +0100
+@@ -621,6 +621,7 @@
+ 	void setImageYOffset(const double);
+ 	void moveImageXYOffsetBy(const double, const double);
+ 	void setImageXYOffset(const double, const double);
++	void setImageRotation(int steps) { pixm.imgInfo.rotation = steps; }
+ 	//Reverse
+ 	bool reversed() const { return Reverse; }
+ 	void setReversed(bool);
+diff -r a151b71c3ca5 Scribus/scribus/pageitem_desaxe.cpp
+--- a/Scribus/scribus/pageitem_desaxe.cpp	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/pageitem_desaxe.cpp	Tue Feb 04 12:43:34 2014 +0100
+@@ -131,6 +131,7 @@
+ 	result.insert("image-y-scale", toXMLString(item->imageYScale()));
+ 	result.insert("image-x-position", toXMLString(item->imageXOffset()));
+ 	result.insert("image-y-position", toXMLString(item->imageYOffset()));
++	result.insert("image-rotation", toXMLString(item->pixm.imgInfo.rotation));
+ 	//	result.insert("image-x-dpi", toXMLString(item->imageXDpi()));
+ 	//	result.insert("image-y-dpi", toXMLString(item->imageYDpi()));
+ 	result.insert("image-shown", toXMLString(item->imageShown()));
+@@ -706,6 +707,7 @@
+ 	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setImageYScale, "image-y-scale", &parseDouble ));
+ 	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setImageXOffset, "image-x-position", &parseDouble ));
+ 	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>( & PageItem::setImageYOffset, "image-y-position", &parseDouble ));
++	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,int>( & PageItem::setImageRotation, "image-rotation", &parseInt ));
+ 	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,int>( & PageItem::setImagePagenumber, "pagenumber", &parseInt ));
+ 	//	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>("image-x-dpi", &parseDouble ));  //NYI
+ 	//	ruleset.addRule(itemPrefix, SetAttributeWithConversion<PageItem,double>("image-y-dpi", &parseDouble ));  //NYI
+diff -r a151b71c3ca5 Scribus/scribus/pdflib_core.cpp
+--- a/Scribus/scribus/pdflib_core.cpp	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/pdflib_core.cpp	Tue Feb 04 12:43:34 2014 +0100
+@@ -6763,6 +6763,7 @@
+ 	if (ext.isEmpty())
+ 		ext = getImageType(fn);
+ 	ScImage img;
++	img.imgInfo.rotation = c->pixm.imgInfo.rotation;
+ 	QString tmp, tmpy, dummy, cmd1, cmd2, BBox;
+ 	QChar  tc;
+ 	bool   found = false;
+@@ -7230,7 +7231,7 @@
+ 			}
+ 			if (extensionIndicatesJPEG(ext) && (cm != PDFOptions::Compression_None))
+ 			{
+-				if (((Options.UseRGB || Options.UseProfiles2) && (cm == PDFOptions::Compression_Auto) && (c->effectsInUse.count() == 0) && (img.imgInfo.colorspace == ColorSpaceRGB)) && (!img.imgInfo.progressive) && (!((Options.RecalcPic) && (Options.PicRes < (qMax(72.0 / c->imageXScale(), 72.0 / c->imageYScale()))))))
++				if (((img.imgInfo.rotation == 0) && (Options.UseRGB || Options.UseProfiles2) && (cm == PDFOptions::Compression_Auto) && (c->effectsInUse.count() == 0) && (img.imgInfo.colorspace == ColorSpaceRGB)) && (!img.imgInfo.progressive) && (!((Options.RecalcPic) && (Options.PicRes < (qMax(72.0 / c->imageXScale(), 72.0 / c->imageYScale()))))))
+ 				{
+ 					jpegUseOriginal = true;
+ 					cm = PDFOptions::Compression_JPEG;
+diff -r a151b71c3ca5 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Tue Feb 04 12:43:34 2014 +0100
+@@ -2205,6 +2205,7 @@
+ 		currItem->UseEmbedded = obj->attribute("EMBEDDED", "1").toInt();
+ 		currItem->pixm.imgInfo.lowResType = obj->attribute("ImageRes", "1").toInt();
+ 		currItem->pixm.imgInfo.actualPageNumber = obj->attribute("Pagenumber", "0").toInt();
++		currItem->pixm.imgInfo.rotation = obj->attribute("ImageRotation", "0").toInt();
+ 		IT = obj->firstChild();
+ 		while(!IT.isNull())
+ 		{
+diff -r a151b71c3ca5 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Tue Feb 04 12:43:34 2014 +0100
+@@ -1140,6 +1140,7 @@
+ 		docu.writeAttribute("ImageClip", item->pixm.imgInfo.usedPath);
+ 		docu.writeAttribute("ImageRes", item->pixm.imgInfo.lowResType);
+ 		docu.writeAttribute("Pagenumber", item->pixm.imgInfo.actualPageNumber);
++		docu.writeAttribute("ImageRotation", item->pixm.imgInfo.rotation);
+ 		docu.writeAttribute("isInline", static_cast<int>(item->isEmbedded));
+ 		docu.writeAttribute("fillRule", static_cast<int>(item->fillRule));
+ 		docu.writeAttribute("doOverprint", static_cast<int>(item->doOverprint));
+diff -r a151b71c3ca5 Scribus/scribus/propertiespalette.cpp
+--- a/Scribus/scribus/propertiespalette.cpp	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/propertiespalette.cpp	Tue Feb 04 12:43:34 2014 +0100
+@@ -1345,6 +1345,18 @@
+ 	imagePageNumberSelector->addWidget( imagePageNumber, 0, 1);
+ 	pageLayout_4->addLayout( imagePageNumberSelector );
+ 	
++	QGridLayout* imageRotationSelector = new QGridLayout();
++	imageRotationSelector->setSpacing( 5 );
++	imageRotationSelector->setMargin( 0 );
++	imageRotationSpinBox =  new QSpinBox( page_4 );
++	imageRotationSpinBox->setMinimum(0);
++	imageRotationSpinBox->setMaximum(3);
++	QLabel* imageRotationLabel = new QLabel( QString::fromUtf8("&Rotation in 90° steps:"), page_4 );
++	imageRotationLabel->setBuddy(imageRotationSpinBox);
++	imageRotationSelector->addWidget( imageRotationLabel, 0, 0 );
++	imageRotationSelector->addWidget( imageRotationSpinBox, 0, 1);
++	pageLayout_4->addLayout( imageRotationSelector );
++
+ 	FreeScale = new QRadioButton( "&Free Scaling", page_4 );
+ 	FreeScale->setChecked( true );
+ 	pageLayout_4->addWidget( FreeScale );
+@@ -1588,6 +1600,7 @@
+ 	connect(Size, SIGNAL(valueChanged(double)), this, SLOT(NewSize()));
+ 	connect(Extra, SIGNAL(valueChanged(double)), this, SLOT(NewTracking()));
+ 	connect(imagePageNumber, SIGNAL(valueChanged(int)), this, SLOT(NewPage()));
++	connect(imageRotationSpinBox, SIGNAL(valueChanged(int)), this, SLOT(NewImageRotation()));
+ 	connect(imageXScaleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(HChange()));
+ 	connect(imageYScaleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(VChange()));
+ 	connect(imageXOffsetSpinBox, SIGNAL(valueChanged(double)), this, SLOT(NewLocalXY()));
+@@ -2281,6 +2294,7 @@
+ 	disconnect(imageYScaleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(VChange()));
+ 	disconnect(imageXOffsetSpinBox, SIGNAL(valueChanged(double)), this, SLOT(NewLocalXY()));
+ 	disconnect(imageYOffsetSpinBox, SIGNAL(valueChanged(double)), this, SLOT(NewLocalXY()));
++	disconnect(imageRotationSpinBox, SIGNAL(valueChanged(int)), this, SLOT(NewImageRotation()));
+ 	disconnect(DTop, SIGNAL(valueChanged(double)), this, SLOT(NewTDist()));
+ 	disconnect(DLeft, SIGNAL(valueChanged(double)), this, SLOT(NewTDist()));
+ 	disconnect(DRight, SIGNAL(valueChanged(double)), this, SLOT(NewTDist()));
+@@ -2488,10 +2502,12 @@
+ 	setScaleAndOffset(i->imageXScale(), i->imageYScale(), i->imageXOffset(), i->imageYOffset());
+ 	setLineWidth(i->lineWidth());
+ 	setLIvalue(i->lineStyle(), i->lineEnd(), i->lineJoin());
++	imageRotationSpinBox->setValue(i->pixm.imgInfo.rotation);
+ 	connect(imageXScaleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(HChange()));
+ 	connect(imageYScaleSpinBox, SIGNAL(valueChanged(double)), this, SLOT(VChange()));
+ 	connect(imageXOffsetSpinBox, SIGNAL(valueChanged(double)), this, SLOT(NewLocalXY()));
+ 	connect(imageYOffsetSpinBox, SIGNAL(valueChanged(double)), this, SLOT(NewLocalXY()));
++	connect(imageRotationSpinBox, SIGNAL(valueChanged(int)), this, SLOT(NewImageRotation()));
+ 
+ 	DoGroup->setEnabled(false);
+ 	DoUnGroup->setEnabled(false);
+@@ -4073,6 +4089,18 @@
+ 	CurItem->update();
+ }
+ 
++void PropertiesPalette::NewImageRotation()
++{
++	if (!HaveDoc || !HaveItem || !m_ScMW || m_ScMW->scriptIsRunning())
++		return;
++	bool reallynew = (CurItem->pixm.imgInfo.rotation != imageRotationSpinBox->value());
++	CurItem->pixm.imgInfo.rotation = imageRotationSpinBox->value();
++	if (reallynew)
++		CurItem->loadImage(CurItem->externalFile(), true);
++	CurItem->update();
++}
++
++
+ void PropertiesPalette::NewGap()
+ {
+ 	if (!HaveDoc || !HaveItem || !m_ScMW || m_ScMW->scriptIsRunning())
+diff -r a151b71c3ca5 Scribus/scribus/propertiespalette.h
+--- a/Scribus/scribus/propertiespalette.h	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/propertiespalette.h	Tue Feb 04 12:43:34 2014 +0100
+@@ -265,6 +265,7 @@
+ 	void handleFlipH();
+ 	void handleFlipV();
+ 	void NewPage();
++	void NewImageRotation();
+ 	void ToggleKette();
+ 	void HChange();
+ 	void VChange();
+@@ -585,6 +586,7 @@
+ 	ScrSpinBox* imageXScaleSpinBox;
+ 	ScrSpinBox* imgDpiX;
+ 	ScrSpinBox* imgDpiY;
++	QSpinBox* imageRotationSpinBox;
+ 	ScrSpinBox* LSize;
+ 	ScrSpinBox* ChScale;
+ 	ScrSpinBox* ChScaleV;
+diff -r a151b71c3ca5 Scribus/scribus/scimage.cpp
+--- a/Scribus/scribus/scimage.cpp	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/scimage.cpp	Tue Feb 04 12:43:34 2014 +0100
+@@ -131,6 +131,7 @@
+ 	imgInfo.exifInfo.thumbnail = QImage();
+ 	imgInfo.BBoxX = 0;
+ 	imgInfo.BBoxH = 0;
++	imgInfo.rotation = 0;
+ }
+ 
+ ScImage::~ScImage()
+@@ -2193,8 +2194,22 @@
+ 
+ 	if	(pDataLoader->loadPicture(fn, page, gsRes, (requestType == Thumbnail)))
+ 	{
+-		QImage::operator=(pDataLoader->image());
++		int oldRot = imgInfo.rotation;
+ 		imgInfo = pDataLoader->imageInfoRecord();
++		imgInfo.rotation = oldRot;
++		QImage img = pDataLoader->image();
++		if (oldRot != 0)
++		{
++			QMatrix mat;
++			mat.rotate(90.0 * oldRot);
++			img = img.transformed(mat);
++			if (oldRot % 2 == 1)
++			{
++				// some xres/yres swapping would be here -- don't care for now
++			}
++		}
++		QImage::operator=(img);
++
+ 		if (requestType == Thumbnail)
+ 			reqType = RGBData;
+ 	//	if (!cmSettings.useColorManagement() || !useProf)
+diff -r a151b71c3ca5 Scribus/scribus/scimagestructs.h
+--- a/Scribus/scribus/scimagestructs.h	Sun Feb 02 14:04:49 2014 +0100
++++ b/Scribus/scribus/scimagestructs.h	Tue Feb 04 12:43:34 2014 +0100
+@@ -144,6 +144,7 @@
+ 	QList<PSDLayer> layerInfo;
+ 	QList<PSDDuotone_Color> duotoneColors;
+ 	ExifValues exifInfo;
++	int rotation; /* 1=90°, 2=180°, ... */
+ };
+ 
+ #endif
