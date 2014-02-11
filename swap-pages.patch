@@ -1,10 +1,10 @@
 # HG changeset patch
-# Parent af590e5d2a8ad1bb1f955473a15565945b481e5c
+# Parent 0c6e771f9263f1c13ba1acd68362e45326f188b8
 add the ability to swap two pages to the 'Move Pages' dialog
 
-diff -r af590e5d2a8a Scribus/scribus/movepage.cpp
---- a/Scribus/scribus/movepage.cpp	Mon Jun 24 07:48:07 2013 +0200
-+++ b/Scribus/scribus/movepage.cpp	Mon Jun 24 08:46:45 2013 +0200
+diff -r 0c6e771f9263 Scribus/scribus/movepage.cpp
+--- a/Scribus/scribus/movepage.cpp	Tue Feb 11 07:45:20 2014 +0100
++++ b/Scribus/scribus/movepage.cpp	Tue Feb 11 07:59:35 2014 +0100
 @@ -68,6 +68,10 @@
  	mvWhereData->addItem( tr("Before Page"));
  	mvWhereData->addItem( tr("After Page"));
@@ -37,26 +37,25 @@ diff -r af590e5d2a8a Scribus/scribus/movepage.cpp
  }
  
  
-diff -r af590e5d2a8a Scribus/scribus/scribus.cpp
---- a/Scribus/scribus/scribus.cpp	Mon Jun 24 07:48:07 2013 +0200
-+++ b/Scribus/scribus/scribus.cpp	Mon Jun 24 08:46:45 2013 +0200
-@@ -6925,7 +6925,12 @@
+diff -r 0c6e771f9263 Scribus/scribus/scribus.cpp
+--- a/Scribus/scribus/scribus.cpp	Tue Feb 11 07:45:20 2014 +0100
++++ b/Scribus/scribus/scribus.cpp	Tue Feb 11 07:59:35 2014 +0100
+@@ -6927,6 +6927,12 @@
  		int to = dia->getToPage();
  		int wie = dia->getWhere();
  		int wo = dia->getWherePage();
--		if (from != wo || (wie == 2 && to != signed(doc->Pages->count()) ) )
 +		if (wie == 3)
 +		{
 +			doc->swapPages(from-1, wo-1);
 +			updateGUIAfterPagesChanged();
++			return;
 +		}
-+		else if (from != wo || (wie == 2 && to != signed(doc->Pages->count()) ) )
- 		{
- 			doc->movePage(from-1, to, wo-1, wie);
- 			updateGUIAfterPagesChanged();
-diff -r af590e5d2a8a Scribus/scribus/scribusdoc.cpp
---- a/Scribus/scribus/scribusdoc.cpp	Mon Jun 24 07:48:07 2013 +0200
-+++ b/Scribus/scribus/scribusdoc.cpp	Mon Jun 24 08:46:45 2013 +0200
+ 		if ((wie < 2) && (from <= wo) && (wo <= to))
+ 			return;
+ 		if (wie == 2 && to == signed(doc->Pages->count()))
+diff -r 0c6e771f9263 Scribus/scribus/scribusdoc.cpp
+--- a/Scribus/scribus/scribusdoc.cpp	Tue Feb 11 07:45:20 2014 +0100
++++ b/Scribus/scribus/scribusdoc.cpp	Tue Feb 11 07:59:35 2014 +0100
 @@ -1962,6 +1962,13 @@
  	changed();
  }
@@ -71,9 +70,9 @@ diff -r af590e5d2a8a Scribus/scribus/scribusdoc.cpp
  
  void ScribusDoc::movePage(const int fromPage, const int toPage, const int dest, const int position)
  {
-diff -r af590e5d2a8a Scribus/scribus/scribusdoc.h
---- a/Scribus/scribus/scribusdoc.h	Mon Jun 24 07:48:07 2013 +0200
-+++ b/Scribus/scribus/scribusdoc.h	Mon Jun 24 08:46:45 2013 +0200
+diff -r 0c6e771f9263 Scribus/scribus/scribusdoc.h
+--- a/Scribus/scribus/scribusdoc.h	Tue Feb 11 07:45:20 2014 +0100
++++ b/Scribus/scribus/scribusdoc.h	Tue Feb 11 07:59:35 2014 +0100
 @@ -178,6 +178,12 @@
  	 */
  	void setLocationBasedPageLRMargins(uint pageIndex);
