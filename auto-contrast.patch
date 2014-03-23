@@ -1,0 +1,355 @@
+# HG changeset patch
+# Parent 3753883a70d69fdfa93fc7d91f215a0db6d0a548
+auto contrast image effect
+
+diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
+--- a/Scribus/scribus/effectsdialog.cpp	Sat Mar 15 07:19:36 2014 +0100
++++ b/Scribus/scribus/effectsdialog.cpp	Sun Mar 23 21:23:10 2014 +0100
+@@ -440,6 +440,50 @@
+ 	WStackPage11Layout->addWidget( Kdisplay );
+ 	optionStack->addWidget( WStackPage_11 );
+ 
++	// auto contrast
++	WStackPage_AC = new QWidget( optionStack );
++	WStackPageACLayout = new QVBoxLayout( WStackPage_AC );
++	WStackPageACLayout->setMargin(5);
++	WStackPageACLayout->setSpacing(5);
++	WStackPageACLayout->setAlignment( Qt::AlignTop );
++	layoutAC = new QHBoxLayout;
++	layoutAC->setMargin(0);
++	layoutAC->setSpacing(5);
++	textLabelAC = new QLabel( tr( "Threshold low:" ), WStackPage_AC );
++	layoutAC->addWidget( textLabelAC );
++	acThresholdLow = new ScrSpinBox( 0.0, 50.0, WStackPage_AC, 1 );
++	acThresholdLow->setDecimals(1);
++	acThresholdLow->setSuffix("%");
++	acThresholdLow->setValue(0.5);
++	layoutAC->addWidget( acThresholdLow );
++
++	layoutAC3 = new QHBoxLayout;
++	layoutAC3->setMargin(0);
++	layoutAC3->setSpacing(5);
++	textLabelAC3 = new QLabel( tr( "Threshold high:" ), WStackPage_AC );
++	layoutAC3->addWidget( textLabelAC3 );
++	acThresholdHigh = new ScrSpinBox( 0.0, 50.0, WStackPage_AC, 1 );
++	acThresholdHigh->setDecimals(1);
++	acThresholdHigh->setSuffix("%");
++	acThresholdHigh->setValue(0.5);
++	layoutAC->addWidget( acThresholdHigh );
++
++	layoutAC2 = new QHBoxLayout;
++	layoutAC2->setMargin(0);
++	layoutAC2->setSpacing(5);
++	textLabelAC2 = new QLabel( tr( "Amount:" ), WStackPage_AC );
++	layoutAC2->addWidget( textLabelAC2 );
++	acAmount = new ScrSpinBox( 0.0, 100.0, WStackPage_AC, 1 );
++	acAmount->setDecimals(0);
++	acAmount->setSuffix("%");
++	acAmount->setValue(100.0);
++	layoutAC2->addWidget( acAmount );
++	acSync = new QCheckBox(tr("Sync colors"), WStackPage_AC);
++	WStackPageACLayout->addLayout( layoutAC );
++	WStackPageACLayout->addWidget( acSync );
++	WStackPageACLayout->addLayout( layoutAC2 );
++	optionStack->addWidget( WStackPage_AC );
++
+ 	layout16->addWidget( optionStack );
+ 	EffectsDialogLayout->addLayout( layout16 );
+ 
+@@ -469,6 +513,7 @@
+ 	availableEffects->addItem( tr("Invert"));
+ 	availableEffects->addItem( tr("Posterize"));
+ 	availableEffects->addItem( tr("Sharpen"));
++	availableEffects->addItem( tr("Auto contrast"));
+ 
+ 	availableEffects->setMinimumSize(fontMetrics().width( tr( "Available Effects" ))+40, 180);
+ 	layout2->addWidget( availableEffects );
+@@ -584,6 +629,12 @@
+ 			usedEffects->addItem( tr("Curves"));
+ 			effectValMap.insert(usedEffects->item(usedEffects->count()-1), effectsList.at(a).effectParameters);
+ 		}
++		if (effectsList.at(a).effectCode == ScImage::EF_AUTOCONTRAST)
++		{
++			usedEffects->addItem( tr("Auto contrast"));
++			effectValMap.insert(usedEffects->item(usedEffects->count()-1), effectsList.at(a).effectParameters);
++		}
++
+ 	}
+ 	layout8->addWidget( usedEffects );
+ 	layout7 = new QHBoxLayout;
+@@ -666,6 +717,10 @@
+ 	connect( shRadius, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
+ 	connect( shValue, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
+ 	connect( blRadius, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++	connect( acThresholdLow, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++	connect( acThresholdHigh, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++	connect( acSync, SIGNAL(stateChanged(int)), this, SLOT(createPreview()));
++	connect( acAmount, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
+ 	connect( solarizeSlider, SIGNAL(valueChanged(int)), this, SLOT(updateSolarize(int)));
+ 	connect( solarizeSlider, SIGNAL(sliderReleased()), this, SLOT(createPreview()));
+ 	connect( Kdisplay->cDisplay, SIGNAL(modified()), this, SLOT(createPreview()));
+@@ -809,6 +864,11 @@
+ 			ef.effectCode = ScImage::EF_GRADUATE;
+ 			ef.effectParameters = effectValMap[usedEffects->item(e)];
+ 		}
++		if (usedEffects->item(e)->text() == tr("Auto contrast"))
++		{
++			ef.effectCode = ScImage::EF_AUTOCONTRAST;
++			ef.effectParameters = effectValMap[usedEffects->item(e)];
++		}
+ 		effectsList.append(ef);
+ 	}
+ }
+@@ -888,6 +948,9 @@
+ 	}
+ 	if (availableEffects->currentItem()->text() == tr("Curves"))
+ 		effectValMap.insert(usedEffects->item(usedEffects->count()-1), "2 0.0 0.0 1.0 1.0 0");
++	if (availableEffects->currentItem()->text() == tr("Auto contrast"))
++		effectValMap.insert(usedEffects->item(usedEffects->count()-1), "0.5 0 100.0");
++
+ 	usedEffects->setCurrentItem(usedEffects->item(usedEffects->count()-1));
+ 	selectEffect(usedEffects->item(usedEffects->count()-1));
+ 	connect( usedEffects, SIGNAL( itemActivated(QListWidgetItem*) ), this, SLOT( selectEffect(QListWidgetItem*) ) );
+@@ -1349,6 +1412,33 @@
+ 			optionStack->setCurrentIndex(10);
+ 			connect( Kdisplay->cDisplay, SIGNAL(modified()), this, SLOT(createPreview()));
+ 		}
++		else if (c->text() == tr("Auto contrast"))
++		{
++			disconnect( acThresholdLow, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++			disconnect( acThresholdHigh, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++			disconnect( acSync, SIGNAL(stateChanged(int)), this, SLOT(createPreview()));
++			disconnect( acAmount, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++			QString tmpstr = effectValMap[c];
++			double thresholdL, thresholdH, amount;
++			int sync;
++			ScTextStream fp(&tmpstr, QIODevice::ReadOnly);
++			fp >> s;
++			thresholdL  = ScCLocale::toDoubleC(s);
++			acThresholdL->setValue(thresholdL);
++			fp >> sync;
++			acSync->setCheckState(sync == 1? Qt::Checked : Qt::Unchecked);
++			fp >> s;
++			amount  = ScCLocale::toDoubleC(s);
++			acAmount->setValue(amount);
++			fp >> s;
++			thresholdH  = ScCLocale::toDoubleC(s);
++			acThresholdH->setValue(thresholdH);
++			optionStack->setCurrentIndex(11);
++			connect( acThresholdLow, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++			connect( acThresholdHigh, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++			connect( acSync, SIGNAL(stateChanged(int)), this, SLOT(createPreview()));
++			connect( acAmount, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
++		}
+ 		else
+ 			optionStack->setCurrentIndex(0);
+ 		currentOptions = c;
+@@ -1428,6 +1518,20 @@
+ 			efval += " "+tmp;
+ 			effectValMap[currentOptions] = efval;
+ 		}
++		if (currentOptions->text() == tr("Auto contrast"))
++		{
++			QString efval = "";
++			QString tmp;
++			tmp.setNum(acThresholdLow->value());
++			efval += tmp;
++			tmp.setNum(acSync->checkState() / 2);
++			efval += " "+tmp;
++			tmp.setNum(acAmount->value());
++			efval += " "+tmp;
++			tmp.setNum(acThresholdHigh->value());
++			efval += " "+tmp;
++			effectValMap[currentOptions] = efval;
++		}
+ 		if (currentOptions->text() == tr("Posterize"))
+ 		{
+ 			QString tmp;
+diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.h
+--- a/Scribus/scribus/effectsdialog.h	Sat Mar 15 07:19:36 2014 +0100
++++ b/Scribus/scribus/effectsdialog.h	Sun Mar 23 21:23:10 2014 +0100
+@@ -10,6 +10,7 @@
+ #include <QDialog>
+ #include <QMap>
+ #include <QTime>
++#include <QCheckBox>
+ 
+ #include "scribusapi.h"
+ #include "scimage.h"
+@@ -60,6 +61,9 @@
+ 	QLabel* textLabel12;
+ 	QLabel* textLabel14;
+ 	QLabel* textLabel15;
++	QLabel* textLabelAC;
++	QLabel* textLabelAC2;
++	QLabel* textLabelAC3;
+ 	QStackedWidget* optionStack;
+ 	QWidget* WStackPage;
+ 	QWidget* WStackPage_2;
+@@ -74,6 +78,12 @@
+ 	ScrSpinBox* shValue;
+ 	QWidget* WStackPage_6;
+ 	ScrSpinBox* blRadius;
++	QWidget* WStackPage_AC;
++	ScrSpinBox* acThresholdLow;
++	ScrSpinBox* acThresholdHigh;
++	ScrSpinBox* acAmount;
++	QCheckBox* acSync;
++
+ 	QWidget* WStackPage_7;
+ 	QSlider* solarizeSlider;
+ 	QWidget* WStackPage_8;
+@@ -192,6 +202,10 @@
+ 	QHBoxLayout* layout23;
+ 	QVBoxLayout* WStackPage6Layout;
+ 	QHBoxLayout* layout24;
++	QVBoxLayout* WStackPageACLayout;
++	QHBoxLayout* layoutAC;
++	QHBoxLayout* layoutAC2;
++	QHBoxLayout* layoutAC3;
+ 	QVBoxLayout* WStackPage7Layout;
+ 	QGridLayout* WStackPage8Layout;
+ 	QGridLayout* WStackPage9Layout;
+diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/scimage.cpp
+--- a/Scribus/scribus/scimage.cpp	Sat Mar 15 07:19:36 2014 +0100
++++ b/Scribus/scribus/scimage.cpp	Sun Mar 23 21:23:10 2014 +0100
+@@ -380,6 +380,19 @@
+ 				fp >> lin;
+ 				doGraduate(curve, cmyk, lin);
+ 			}
++			if (effectsList.at(a).effectCode == EF_AUTOCONTRAST)
++			{
++				QString tmpstr = effectsList.at(a).effectParameters;
++				double threshL, threshH, amount;
++				int sync;
++				ScTextStream fp(&tmpstr, QIODevice::ReadOnly);
++				fp >> threshL;
++				fp >> sync;
++				fp >> amount;
++				fp >> threshH;
++				autoContrast(cmyk, threshL, threshH amount / 100.0, sync == 1);
++			}
++
+ 		}
+ 	}
+ }
+@@ -848,6 +861,98 @@
+ 	}
+ }
+ 
++void ScImage::autoContrast(bool cmyk, double thresholdLowPercent, double thresholdHighPercent, double amount, bool sync)
++{
++	if (cmyk)
++		return;
++	int h = height();
++	int w = width();
++	QRgb *s;
++	QRgb r;
++	int c, m, y, k;
++	int minR, maxR, minG, maxG, minB, maxB;
++	double sum;
++	double thresholdLow = h * w * thresholdLowPercent / 100;
++	double thresholdHigh = h * w * thresholdHighPercent / 100;
++	//unsigned char *p;
++	QVector<double> histR(256, 0.0);
++	QVector<double> histG(256, 0.0);
++	QVector<double> histB(256, 0.0);
++	for( int yi=0; yi < h; ++yi )
++	{
++		s = (QRgb*)(scanLine( yi ));
++		for( int xi=0; xi < w; ++xi )
++		{
++			r = *s;
++			histR[qRed(r)]++;
++			histG[qGreen(r)]++;
++			histB[qBlue(r)]++;
++			s++;
++		}
++	}
++	sum = 0;
++	for (int i=0; i<=255; i++) { sum += histR[i]; if (sum > thresholdLow) { minR = i; break; } }
++	sum = 0;
++	for (int i=255; i>=0; i--) { sum += histR[i]; if (sum > thresholdHigh) { maxR = i; break; } }
++	sum = 0;
++	for (int i=0; i<=255; i++) { sum += histG[i]; if (sum > thresholdLow) { minG = i; break; } }
++	sum = 0;
++	for (int i=255; i>=0; i--) { sum += histG[i]; if (sum > thresholdHigh) { maxG = i; break; } }
++	sum = 0;
++	for (int i=0; i<=255; i++) { sum += histB[i]; if (sum > thresholdLow) { minB = i; break; } }
++	sum = 0;
++	for (int i=255; i>=0; i--) { sum += histB[i]; if (sum > thresholdHigh) { maxB = i; break; } }
++	if (sync)
++	{
++		minR = minG = minB = qMin(minR, qMin(minG, minB));
++		maxR = maxG = maxB = qMax(maxR, qMax(maxG, maxB));
++	}
++	if (amount < 1.0)
++	{
++		minR = qRound(minR * amount);
++		maxR = qRound(255 - (255 - maxR) * amount);
++		minG = qRound(minG * amount);
++		maxG = qRound(255 - (255 - maxG) * amount);
++		minB = qRound(minB * amount);
++		maxB = qRound(255 - (255 - maxB) * amount);
++	}
++	qDebug() <<"-->"<< minR << maxR <<minG<<maxG<<minB<<maxB;
++	QVector<int> curveTableR(256);
++	QVector<int> curveTableG(256);
++	QVector<int> curveTableB(256);
++	for (int i = 0; i <= 255; i++)
++	{
++		if (maxR == minR)
++			curveTableR[i] = maxR;
++		else
++			curveTableR[i] = qMin(255, qMax(0, qRound((i - minR) * 255.0 / (maxR - minR))));
++		if (maxG == minG)
++			curveTableG[i] = maxG;
++		else	
++			curveTableG[i] = qMin(255, qMax(0, qRound((i - minG) * 255.0 / (maxG - minG))));
++		if (maxB == minB)
++			curveTableB[i] = maxB;
++		else	
++			curveTableB[i] = qMin(255, qMax(0, qRound((i - minB) * 255.0 / (maxB - minB))));
++	}
++
++	for( int yi=0; yi < h; ++yi )
++	{
++		s = (QRgb*)(scanLine( yi ));
++		for( int xi=0; xi < w; ++xi )
++		{
++			r = *s;
++			c = curveTableR[qRed(r)];
++			m = curveTableG[qGreen(r)];
++			y = curveTableB[qBlue(r)];
++			k = qAlpha(r);
++			*s = qRgba(c, m, y, k);
++			s++;
++		}
++	}
++
++}
++
+ void ScImage::colorize(ScribusDoc* doc, ScColor color, int shade, bool cmyk)
+ {
+ 	int h = height();
+diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/scimage.h
+--- a/Scribus/scribus/scimage.h	Sat Mar 15 07:19:36 2014 +0100
++++ b/Scribus/scribus/scimage.h	Sun Mar 23 21:23:10 2014 +0100
+@@ -62,7 +62,8 @@
+ 		EF_DUOTONE = 8,
+ 		EF_TRITONE = 9,
+ 		EF_QUADTONE = 10,
+-		EF_GRADUATE = 11
++		EF_GRADUATE = 11,
++		EF_AUTOCONTRAST = 12
+ 	};
+ 
+ 	void initialize();
+@@ -124,6 +125,7 @@
+ 	void contrast(int contrastValue, bool cmyk);
+ 	void brightness(int brightnessValue, bool cmyk);
+ 	void invert(bool cmyk);
++	void autoContrast(bool cmyk, double thresholdLowPercent, double thresholdHighPercent, double amount, bool sync);
+ 	void colorize(ScribusDoc* doc, ScColor color, int shade, bool cmyk);
+ 	void duotone(ScribusDoc* doc, ScColor color1, int shade1, FPointArray curve1, bool lin1, ScColor color2, int shade2, FPointArray curve2, bool lin2, bool cmyk);
+ 	void tritone(ScribusDoc* doc, ScColor color1, int shade1, FPointArray curve1, bool lin1, ScColor color2, int shade2, FPointArray curve2, bool lin2, ScColor color3, int shade3, FPointArray curve3, bool lin3, bool cmyk);
