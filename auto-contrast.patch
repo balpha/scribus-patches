@@ -2,10 +2,10 @@
 # Parent 3753883a70d69fdfa93fc7d91f215a0db6d0a548
 auto contrast image effect
 
-diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
+diff -r 3753883a70d6 Scribus/scribus/effectsdialog.cpp
 --- a/Scribus/scribus/effectsdialog.cpp	Sat Mar 15 07:19:36 2014 +0100
-+++ b/Scribus/scribus/effectsdialog.cpp	Sun Mar 23 21:23:10 2014 +0100
-@@ -440,6 +440,50 @@
++++ b/Scribus/scribus/effectsdialog.cpp	Mon Mar 24 08:21:53 2014 +0100
+@@ -440,6 +440,51 @@
  	WStackPage11Layout->addWidget( Kdisplay );
  	optionStack->addWidget( WStackPage_11 );
  
@@ -35,7 +35,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
 +	acThresholdHigh->setDecimals(1);
 +	acThresholdHigh->setSuffix("%");
 +	acThresholdHigh->setValue(0.5);
-+	layoutAC->addWidget( acThresholdHigh );
++	layoutAC3->addWidget( acThresholdHigh );
 +
 +	layoutAC2 = new QHBoxLayout;
 +	layoutAC2->setMargin(0);
@@ -49,6 +49,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
 +	layoutAC2->addWidget( acAmount );
 +	acSync = new QCheckBox(tr("Sync colors"), WStackPage_AC);
 +	WStackPageACLayout->addLayout( layoutAC );
++	WStackPageACLayout->addLayout( layoutAC3 );
 +	WStackPageACLayout->addWidget( acSync );
 +	WStackPageACLayout->addLayout( layoutAC2 );
 +	optionStack->addWidget( WStackPage_AC );
@@ -56,7 +57,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
  	layout16->addWidget( optionStack );
  	EffectsDialogLayout->addLayout( layout16 );
  
-@@ -469,6 +513,7 @@
+@@ -469,6 +514,7 @@
  	availableEffects->addItem( tr("Invert"));
  	availableEffects->addItem( tr("Posterize"));
  	availableEffects->addItem( tr("Sharpen"));
@@ -64,7 +65,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
  
  	availableEffects->setMinimumSize(fontMetrics().width( tr( "Available Effects" ))+40, 180);
  	layout2->addWidget( availableEffects );
-@@ -584,6 +629,12 @@
+@@ -584,6 +630,12 @@
  			usedEffects->addItem( tr("Curves"));
  			effectValMap.insert(usedEffects->item(usedEffects->count()-1), effectsList.at(a).effectParameters);
  		}
@@ -77,7 +78,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
  	}
  	layout8->addWidget( usedEffects );
  	layout7 = new QHBoxLayout;
-@@ -666,6 +717,10 @@
+@@ -666,6 +718,10 @@
  	connect( shRadius, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
  	connect( shValue, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
  	connect( blRadius, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
@@ -88,7 +89,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
  	connect( solarizeSlider, SIGNAL(valueChanged(int)), this, SLOT(updateSolarize(int)));
  	connect( solarizeSlider, SIGNAL(sliderReleased()), this, SLOT(createPreview()));
  	connect( Kdisplay->cDisplay, SIGNAL(modified()), this, SLOT(createPreview()));
-@@ -809,6 +864,11 @@
+@@ -809,6 +865,11 @@
  			ef.effectCode = ScImage::EF_GRADUATE;
  			ef.effectParameters = effectValMap[usedEffects->item(e)];
  		}
@@ -100,17 +101,17 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
  		effectsList.append(ef);
  	}
  }
-@@ -888,6 +948,9 @@
+@@ -888,6 +949,9 @@
  	}
  	if (availableEffects->currentItem()->text() == tr("Curves"))
  		effectValMap.insert(usedEffects->item(usedEffects->count()-1), "2 0.0 0.0 1.0 1.0 0");
 +	if (availableEffects->currentItem()->text() == tr("Auto contrast"))
-+		effectValMap.insert(usedEffects->item(usedEffects->count()-1), "0.5 0 100.0");
++		effectValMap.insert(usedEffects->item(usedEffects->count()-1), "0.5 0 100.0 0.5");
 +
  	usedEffects->setCurrentItem(usedEffects->item(usedEffects->count()-1));
  	selectEffect(usedEffects->item(usedEffects->count()-1));
  	connect( usedEffects, SIGNAL( itemActivated(QListWidgetItem*) ), this, SLOT( selectEffect(QListWidgetItem*) ) );
-@@ -1349,6 +1412,33 @@
+@@ -1349,6 +1413,33 @@
  			optionStack->setCurrentIndex(10);
  			connect( Kdisplay->cDisplay, SIGNAL(modified()), this, SLOT(createPreview()));
  		}
@@ -126,7 +127,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
 +			ScTextStream fp(&tmpstr, QIODevice::ReadOnly);
 +			fp >> s;
 +			thresholdL  = ScCLocale::toDoubleC(s);
-+			acThresholdL->setValue(thresholdL);
++			acThresholdLow->setValue(thresholdL);
 +			fp >> sync;
 +			acSync->setCheckState(sync == 1? Qt::Checked : Qt::Unchecked);
 +			fp >> s;
@@ -134,7 +135,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
 +			acAmount->setValue(amount);
 +			fp >> s;
 +			thresholdH  = ScCLocale::toDoubleC(s);
-+			acThresholdH->setValue(thresholdH);
++			acThresholdHigh->setValue(thresholdH);
 +			optionStack->setCurrentIndex(11);
 +			connect( acThresholdLow, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
 +			connect( acThresholdHigh, SIGNAL(valueChanged(double)), this, SLOT(createPreview()));
@@ -144,7 +145,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
  		else
  			optionStack->setCurrentIndex(0);
  		currentOptions = c;
-@@ -1428,6 +1518,20 @@
+@@ -1428,6 +1519,20 @@
  			efval += " "+tmp;
  			effectValMap[currentOptions] = efval;
  		}
@@ -165,9 +166,9 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.cpp
  		if (currentOptions->text() == tr("Posterize"))
  		{
  			QString tmp;
-diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.h
+diff -r 3753883a70d6 Scribus/scribus/effectsdialog.h
 --- a/Scribus/scribus/effectsdialog.h	Sat Mar 15 07:19:36 2014 +0100
-+++ b/Scribus/scribus/effectsdialog.h	Sun Mar 23 21:23:10 2014 +0100
++++ b/Scribus/scribus/effectsdialog.h	Mon Mar 24 08:21:53 2014 +0100
 @@ -10,6 +10,7 @@
  #include <QDialog>
  #include <QMap>
@@ -210,9 +211,9 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/effectsdialog.h
  	QVBoxLayout* WStackPage7Layout;
  	QGridLayout* WStackPage8Layout;
  	QGridLayout* WStackPage9Layout;
-diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/scimage.cpp
+diff -r 3753883a70d6 Scribus/scribus/scimage.cpp
 --- a/Scribus/scribus/scimage.cpp	Sat Mar 15 07:19:36 2014 +0100
-+++ b/Scribus/scribus/scimage.cpp	Sun Mar 23 21:23:10 2014 +0100
++++ b/Scribus/scribus/scimage.cpp	Mon Mar 24 08:21:53 2014 +0100
 @@ -380,6 +380,19 @@
  				fp >> lin;
  				doGraduate(curve, cmyk, lin);
@@ -227,7 +228,7 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/scimage.cpp
 +				fp >> sync;
 +				fp >> amount;
 +				fp >> threshH;
-+				autoContrast(cmyk, threshL, threshH amount / 100.0, sync == 1);
++				autoContrast(cmyk, threshL, threshH, amount / 100.0, sync == 1);
 +			}
 +
  		}
@@ -332,9 +333,9 @@ diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/scimage.cpp
  void ScImage::colorize(ScribusDoc* doc, ScColor color, int shade, bool cmyk)
  {
  	int h = height();
-diff -r 3753883a70d6 -r 03af51307f24 Scribus/scribus/scimage.h
+diff -r 3753883a70d6 Scribus/scribus/scimage.h
 --- a/Scribus/scribus/scimage.h	Sat Mar 15 07:19:36 2014 +0100
-+++ b/Scribus/scribus/scimage.h	Sun Mar 23 21:23:10 2014 +0100
++++ b/Scribus/scribus/scimage.h	Mon Mar 24 08:21:53 2014 +0100
 @@ -62,7 +62,8 @@
  		EF_DUOTONE = 8,
  		EF_TRITONE = 9,
