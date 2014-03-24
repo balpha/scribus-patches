@@ -1,0 +1,68 @@
+# HG changeset patch
+# Parent b1608ffbb26f7a2c2f76e28cae9355e62e37faf3
+quick preview mode toggle
+
+diff -r b1608ffbb26f -r 629f27c10ac3 Scribus/scribus/scribusview.cpp
+--- a/Scribus/scribus/scribusview.cpp	Mon Mar 24 08:18:18 2014 +0100
++++ b/Scribus/scribus/scribusview.cpp	Mon Mar 24 08:19:22 2014 +0100
+@@ -248,6 +248,10 @@
+ 	previewToolbarButton->setFlat(OPTION_FLAT_BUTTON);
+ 	previewToolbarButton->setIcon(loadIcon("previewOn.png"));
+ #endif
++	previewToggleMenu = new QMenu();
++	idPreviewToggleMenu = previewToggleMenu->addAction( "Recalc pictures after switch", this, SLOT(togglePreview()));
++	previewToolbarButton->setMenu(previewToggleMenu);
++
+ 	cmsAdjustMenu = new QMenu();
+ 	idCmsAdjustMenu = cmsAdjustMenu->addAction( "Configure CMS...", this, SLOT(adjustCMS()));
+ 	cmsToolbarButton->setMenu(cmsAdjustMenu);
+@@ -313,7 +317,7 @@
+ 	connect(layerMenu, SIGNAL(activated(int)), this, SLOT(GotoLa(int)));
+ 	connect(unitSwitcher, SIGNAL(activated(int)), this, SLOT(ChgUnit(int)));
+ 	connect(previewQualitySwitcher, SIGNAL(activated(int)), this, SLOT(changePreviewQuality(int)));
+-	connect(previewToolbarButton, SIGNAL(clicked()), this, SLOT(togglePreview()));
++	connect(previewToolbarButton, SIGNAL(clicked()), this, SLOT(togglePreviewWithoutPictRecalc()));
+ 	connect(cmsToolbarButton, SIGNAL(clicked()), this, SLOT(toggleCMS()));
+ 	connect(visualMenu, SIGNAL(activated(int)), this, SLOT(switchPreviewVisual(int)));
+ 	connect(this, SIGNAL(HaveSel(int)), this, SLOT(selectionChanged()));
+@@ -403,7 +407,7 @@
+ 	DrawNew();
+ }
+ 
+-void ScribusView::togglePreview()
++void ScribusView::togglePreview(bool recalcPicts)
+ {
+ 	m_canvas->m_viewMode.viewAsPreview = !m_canvas->m_viewMode.viewAsPreview;
+ 	if (m_canvas->m_viewMode.viewAsPreview)
+@@ -440,7 +444,8 @@
+ 	visualMenu->setEnabled(m_canvas->m_viewMode.viewAsPreview);
+ 	ScGuardedPtr<ScribusDoc> docPtr = Doc->guardedPtr();
+ 	Doc->recalculateColors();
+-	Doc->recalcPicturesRes();
++	if (recalcPicts)
++		Doc->recalcPicturesRes();
+ //	repaintContents(QRect());
+ 	if (docPtr) // document may have been destroyed in-between
+ 	{
+diff -r b1608ffbb26f -r 629f27c10ac3 Scribus/scribus/scribusview.h
+--- a/Scribus/scribus/scribusview.h	Mon Mar 24 08:18:18 2014 +0100
++++ b/Scribus/scribus/scribusview.h	Mon Mar 24 08:19:22 2014 +0100
+@@ -269,7 +269,8 @@
+ 	void languageChange();
+ 	void toggleCMS();
+ 	void switchPreviewVisual(int vis);
+-	void togglePreview();
++	void togglePreview(bool recalcPicts = true);
++	void togglePreviewWithoutPictRecalc() { togglePreview(false); } ;
+ 	void unitChange();
+ 	void setRulersShown(bool isShown);
+ 	void slotUpdateContents();
+@@ -328,6 +329,8 @@
+ 	QMenu *pmenResolution;
+ 	QMenu *cmsAdjustMenu;
+ 	QAction *idCmsAdjustMenu;
++	QMenu *previewToggleMenu;
++	QAction *idPreviewToggleMenu;
+ 	QPoint m_pressLocation;
+ 	QTime m_moveTimer;
+ 	QTimer *m_dragTimer;
