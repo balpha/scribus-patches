@@ -1,0 +1,112 @@
+# HG changeset patch
+# Parent 3065b20a14dbaf1852510aa860b883d3e7283594
+apply image effects before color management
+
+diff -r 3065b20a14db -r 979b6e395b52 Scribus/scribus/pageitem.cpp
+--- a/Scribus/scribus/pageitem.cpp	Wed Apr 02 13:35:47 2014 +0200
++++ b/Scribus/scribus/pageitem.cpp	Sat Apr 05 14:33:39 2014 +0200
+@@ -5249,7 +5249,7 @@
+ 		gsRes=PrefsManager::instance()->gsResolution();
+ 	bool dummy;
+ 	CMSettings cms(m_Doc, IProfile, IRender);
+-	if (!pixm.LoadPicture(filename, pixm.imgInfo.actualPageNumber, cms, UseEmbedded, true, ScImage::RGBProof, gsRes, &dummy, showMsg))
++	if (!pixm.LoadPicture(filename, pixm.imgInfo.actualPageNumber, cms, UseEmbedded, true, ScImage::RGBProof, gsRes, &dummy, showMsg, &effectsInUse, &(m_Doc->PageColors)))
+ 	{
+ 		Pfile = fi.absoluteFilePath();
+ 		PictureIsAvailable = false;
+@@ -5456,7 +5456,6 @@
+ 			}
+ 			effectsInUse.append(ef);
+ 		}
+-		pixm.applyEffect(effectsInUse, m_Doc->PageColors, false);
+ //		if (reload)
+ 			pixm.imgInfo.lowResType = lowResTypeBack;
+ 		if (pixm.imgInfo.lowResType != 0)
+diff -r 3065b20a14db -r 979b6e395b52 Scribus/scribus/pdflib_core.cpp
+--- a/Scribus/scribus/pdflib_core.cpp	Wed Apr 02 13:35:47 2014 +0200
++++ b/Scribus/scribus/pdflib_core.cpp	Sat Apr 05 14:33:39 2014 +0200
+@@ -6934,17 +6934,17 @@
+ 				img.imgInfo.isRequest = c->pixm.imgInfo.isRequest;
+ 				CMSettings cms(c->doc(), Profil, Intent);
+ 				if (Options.UseRGB)
+-					imageLoaded = img.LoadPicture(fn, c->pixm.imgInfo.actualPageNumber, cms, Embedded, true, ScImage::RGBData, 72, &realCMYK);
++					imageLoaded = img.LoadPicture(fn, c->pixm.imgInfo.actualPageNumber, cms, Embedded, true, ScImage::RGBData, 72, &realCMYK, false, &(c->effectsInUse), &(c->doc()->PageColors));
+ 				else
+ 				{
+ 					if ((doc.HasCMS) && (Options.UseProfiles2))
+-						imageLoaded = img.LoadPicture(fn, c->pixm.imgInfo.actualPageNumber, cms, Embedded, true, ScImage::RawData, 72, &realCMYK);
++						imageLoaded = img.LoadPicture(fn, c->pixm.imgInfo.actualPageNumber, cms, Embedded, true, ScImage::RawData, 72, &realCMYK, false, &(c->effectsInUse), &(c->doc()->PageColors));
+ 					else
+ 					{
+ 						if (Options.isGrayscale)
+-							imageLoaded = img.LoadPicture(fn, c->pixm.imgInfo.actualPageNumber, cms, Embedded, true, ScImage::RGBData, 72, &realCMYK);
++							imageLoaded = img.LoadPicture(fn, c->pixm.imgInfo.actualPageNumber, cms, Embedded, true, ScImage::RGBData, 72, &realCMYK, false, &(c->effectsInUse), &(c->doc()->PageColors));
+ 						else
+-							imageLoaded = img.LoadPicture(fn, c->pixm.imgInfo.actualPageNumber, cms, Embedded, true, ScImage::CMYKData, 72, &realCMYK);
++							imageLoaded = img.LoadPicture(fn, c->pixm.imgInfo.actualPageNumber, cms, Embedded, true, ScImage::CMYKData, 72, &realCMYK, false, &(c->effectsInUse), &(c->doc()->PageColors));
+ 					}
+ 				}
+ 				if (!imageLoaded)
+@@ -7147,7 +7147,6 @@
+ 			}
+ 			origWidth = img.width();
+ 			origHeight = img.height();
+-			img.applyEffect(c->effectsInUse, c->doc()->PageColors, imgE);
+ 			if (!((Options.RecalcPic) && (Options.PicRes < (qMax(72.0 / c->imageXScale(), 72.0 / c->imageYScale())))))
+ 			{
+ 				ImInfo.sxa = sx * (1.0 / ImInfo.reso);
+diff -r 3065b20a14db -r 979b6e395b52 Scribus/scribus/scimage.cpp
+--- a/Scribus/scribus/scimage.cpp	Wed Apr 02 13:35:47 2014 +0200
++++ b/Scribus/scribus/scimage.cpp	Sat Apr 05 14:33:39 2014 +0200
+@@ -2242,7 +2242,8 @@
+ 
+ bool ScImage::LoadPicture(const QString & fn, int page, const CMSettings& cmSettings,
+ 						  bool useEmbedded, bool useProf, RequestType requestType,
+-						  int gsRes, bool *realCMYK, bool showMsg)
++						  int gsRes, bool *realCMYK, bool showMsg,
++						  ScImageEffectList* effectsList, ColorList* colors)
+ {
+ 	// requestType - 0: CMYK, 1: RGB, 2: RGB Proof 3 : RawData, 4: Thumbnail
+ 	// gsRes - is the resolution that ghostscript will render at
+@@ -2351,7 +2352,10 @@
+ 		if (isNull())
+ 			return  ret;
+ 	}
+-
++	if (effectsList)
++	{
++		applyEffect(*effectsList, *colors, isCMYK);
++	}
+ 	QByteArray embeddedProfile = pDataLoader->embeddedProfile();
+ 	if (cmSettings.useColorManagement() && useProf)
+ 	{
+diff -r 3065b20a14db -r 979b6e395b52 Scribus/scribus/scimage.h
+--- a/Scribus/scribus/scimage.h	Wed Apr 02 13:35:47 2014 +0200
++++ b/Scribus/scribus/scimage.h	Sat Apr 05 14:33:39 2014 +0200
+@@ -106,7 +106,7 @@
+ 
+ 	// Load an image into this ScImage instance
+ 	// TODO: document params, split into smaller functions
+-	bool LoadPicture(const QString & fn, int page, const CMSettings& cmSettings, bool useEmbedded, bool useProf, RequestType requestType, int gsRes, bool *realCMYK = 0, bool showMsg = false);
++	bool LoadPicture(const QString & fn, int page, const CMSettings& cmSettings, bool useEmbedded, bool useProf, RequestType requestType, int gsRes, bool *realCMYK = 0, bool showMsg = false, ScImageEffectList* effectsList = NULL, ColorList* colors = NULL);
+ 
+ 	ImageInfoRecord imgInfo;
+ 
+diff -r 3065b20a14db -r 979b6e395b52 Scribus/scribus/scpageoutput.cpp
+--- a/Scribus/scribus/scpageoutput.cpp	Wed Apr 02 13:35:47 2014 +0200
++++ b/Scribus/scribus/scpageoutput.cpp	Sat Apr 05 14:33:39 2014 +0200
+@@ -934,13 +934,12 @@
+ 				scImg.imgInfo.layerInfo.clear();
+ 				scImg.imgInfo.RequestProps = item->pixm.imgInfo.RequestProps;
+ 				scImg.imgInfo.isRequest = item->pixm.imgInfo.isRequest;
+-				scImg.LoadPicture(item->Pfile, item->pixm.imgInfo.actualPageNumber, cmsSettings, item->UseEmbedded, m_useProfiles, translateImageModeToRequest(imageMode), m_imageRes, &dummy);
++				scImg.LoadPicture(item->Pfile, item->pixm.imgInfo.actualPageNumber, cmsSettings, item->UseEmbedded, m_useProfiles, translateImageModeToRequest(imageMode), m_imageRes, &dummy, false, &(item->effectsInUse), &(m_doc->PageColors));
+ 				if( extensionIndicatesEPSorPS(ext) || extensionIndicatesPDF(ext)  )
+ 				{
+ 					imScaleX *= (72.0 / (double) m_imageRes);
+ 					imScaleY *= (72.0 / (double) m_imageRes);
+ 				}
+-				scImg.applyEffect(item->effectsInUse, m_doc->PageColors, useCmyk);
+ 				mode = imageMode;
+ 				pImage = &scImg;
+ 			}
