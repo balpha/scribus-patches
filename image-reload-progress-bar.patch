@@ -1,0 +1,18 @@
+# HG changeset patch
+# Parent 979b6e395b522eab2ce4f80c3e018e566a88554f
+progress bar for image reload after .sla load
+
+diff -r 979b6e395b52 -r b32588dff6ca Scribus/scribus/scribus.cpp
+--- a/Scribus/scribus/scribus.cpp	Sat Apr 05 14:33:39 2014 +0200
++++ b/Scribus/scribus/scribus.cpp	Sun Apr 06 07:59:32 2014 +0200
+@@ -4143,7 +4143,9 @@
+ 			if (doc->HasCMS)
+ 			{
+ 				recalcColors();
+-				doc->RecalcPictures(&ScCore->InputProfiles, &ScCore->InputProfilesCMYK);
++				mainWindowProgressBar->setMaximum(doc->MasterItems.count() + doc->DocItems.count());
++				mainWindowProgressBar->setValue(0);
++				doc->RecalcPictures(&ScCore->InputProfiles, &ScCore->InputProfilesCMYK, mainWindowProgressBar);
+ 			}
+ 		}
+ 		else

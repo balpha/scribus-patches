@@ -9,3 +9,4 @@ image-orientation.patch
 auto-contrast.patch
 quick-preview-toggle.patch
 image-effects-before-color-management.patch
+image-reload-progress-bar.patch
