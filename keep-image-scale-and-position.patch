@@ -1,0 +1,52 @@
+# HG changeset patch
+# Parent 07ae316341a3805b6cdb8ea71b28645737fbd5d2
+keep scale and position when changing the picture in an image frame
+
+diff -r 07ae316341a3 -r ddd0662d0055 Scribus/scribus/pageitem.cpp
+--- a/Scribus/scribus/pageitem.cpp	Sun Apr 06 22:00:40 2014 +0200
++++ b/Scribus/scribus/pageitem.cpp	Mon Apr 07 09:53:06 2014 +0200
+@@ -5237,6 +5237,15 @@
+ 		return false;
+ 	QFileInfo fi(filename);
+ 	QString clPath(pixm.imgInfo.usedPath);
++	bool retainScaleAndPosition = !reload && PictureIsAvailable && ScaleType && OrigW > 0 && OrigH > 0;
++	bool syncRatioWhenRetaining = false;
++	int previousWidth = 0, previousHeight = 0;
++	if (retainScaleAndPosition)
++	{
++		previousWidth = OrigW;
++		previousHeight = OrigH;
++		syncRatioWhenRetaining = fabs(LocalScX - LocalScY) <= 0.0002;
++	}
+ 	pixm.imgInfo.valid = false;
+ 	pixm.imgInfo.clipPath="";
+ 	pixm.imgInfo.PDSpathData.clear();
+@@ -5285,10 +5294,24 @@
+ 		
+ 		if (Pfile != filename)
+ 		{
+-			oldLocalScX = LocalScX = 72.0 / xres;
+-			oldLocalScY = LocalScY = 72.0 / yres;
+-			oldLocalX = LocalX = 0;
+-			oldLocalY = LocalY = 0;
++			if (retainScaleAndPosition && pixm.width() > 0 && pixm.height() > 0)
++			{
++				double ratioX = static_cast<double>(previousWidth) / static_cast<double>(pixm.width());
++				double ratioY = static_cast<double>(previousHeight) / static_cast<double>(pixm.height());
++				if (syncRatioWhenRetaining)
++					ratioX = ratioY = qMax(ratioX, ratioY);
++				oldLocalScX = LocalScX = LocalScX * ratioX;
++				oldLocalScY = LocalScY = LocalScY * ratioY;
++				oldLocalX = LocalX = LocalX / ratioX;
++				oldLocalY = LocalY = LocalY / ratioY;
++			}
++			else
++			{
++				oldLocalScX = LocalScX = 72.0 / xres;
++				oldLocalScY = LocalScY = 72.0 / yres;
++				oldLocalX = LocalX = 0;
++				oldLocalY = LocalY = 0;
++			}
+ 			
+ 			if ((m_Doc->toolSettings.useEmbeddedPath) && (!pixm.imgInfo.clipPath.isEmpty()))
+ 			{

@@ -10,3 +10,4 @@ auto-contrast.patch
 quick-preview-toggle.patch
 image-effects-before-color-management.patch
 image-reload-progress-bar.patch
+keep-image-scale-and-position.patch
