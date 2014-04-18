@@ -1,0 +1,108 @@
+# HG changeset patch
+# Parent ddd0662d0055734063236d6953538af0184c8aaf
+when editing colors, only recalc those images that depend on them
+
+diff -r ddd0662d0055 -r 941fab4627e8 Scribus/scribus/pageitem.cpp
+--- a/Scribus/scribus/pageitem.cpp	Mon Apr 07 09:53:06 2014 +0200
++++ b/Scribus/scribus/pageitem.cpp	Fri Apr 18 13:12:23 2014 +0200
+@@ -5982,6 +5982,25 @@
+ 	PicArt=isShown;
+ }
+ 
++bool PageItem::isColorDependentImage()
++{
++	if (!PictureIsAvailable)
++		return false;
++	for (int a = 0; a < effectsInUse.count(); ++a)
++	{
++		int ec = effectsInUse.at(a).effectCode;
++		switch (ec)
++		{
++			case ScImage::EF_COLORIZE:
++			case ScImage::EF_DUOTONE:
++			case ScImage::EF_TRITONE:
++			case ScImage::EF_QUADTONE:
++				return true;
++		}
++	}
++	return false;
++}
++
+ void PageItem::updateConstants()
+ {
+ 	if (OwnPage!=-1)
+diff -r ddd0662d0055 -r 941fab4627e8 Scribus/scribus/pageitem.h
+--- a/Scribus/scribus/pageitem.h	Mon Apr 07 09:53:06 2014 +0200
++++ b/Scribus/scribus/pageitem.h	Fri Apr 18 13:12:23 2014 +0200
+@@ -1066,6 +1066,8 @@
+ 	bool imageShown() const { return PicArt; }
+ 	void setImageShown(bool);
+ 	
++	bool isColorDependentImage();
++	
+ 	void updateConstants();
+ 	
+ protected:
+diff -r ddd0662d0055 -r 941fab4627e8 Scribus/scribus/scribus.cpp
+--- a/Scribus/scribus/scribus.cpp	Mon Apr 07 09:53:06 2014 +0200
++++ b/Scribus/scribus/scribus.cpp	Fri Apr 18 13:12:23 2014 +0200
+@@ -7520,7 +7520,7 @@
+ 			doc->replaceNamedResources(colorrsc);
+ 			doc->replaceLineStyleColors(dia2->replaceMap);
+ 			doc->recalculateColors();
+-			doc->recalcPicturesRes();
++			doc->recalcPicturesRes(false, true);
+ 			updateColorLists();
+ 			/*			
+ 			propertiesPalette->updateColorList();
+@@ -7568,7 +7568,7 @@
+ 				doc->replaceLineStyleColors(dia->replaceMap);
+ 			}
+ 			doc->recalculateColors();
+-			doc->recalcPicturesRes();
++			doc->recalcPicturesRes(false, true);
+ 			propertiesPalette->updateColorList();
+ 			//3102: update the line styles in PP too
+ 			propertiesPalette->SetLineFormats(doc);
+diff -r ddd0662d0055 -r 941fab4627e8 Scribus/scribus/scribusdoc.cpp
+--- a/Scribus/scribus/scribusdoc.cpp	Mon Apr 07 09:53:06 2014 +0200
++++ b/Scribus/scribus/scribusdoc.cpp	Fri Apr 18 13:12:23 2014 +0200
+@@ -7098,7 +7098,7 @@
+ }
+ 
+ //CB Same as updatePict apart from the name checking, this should be able to be removed
+-void ScribusDoc::recalcPicturesRes(bool applyNewRes)
++void ScribusDoc::recalcPicturesRes(bool applyNewRes, bool skipIfNoColorDependence)
+ {
+ 	int cc = 0;
+ 	int ca = 0;
+@@ -7137,7 +7137,7 @@
+ 	for (int a = 0; a < DocItems.count(); ++a)
+ 	{
+ 		PageItem *currItem = DocItems.at(a);
+-		if (currItem->PictureIsAvailable)
++		if (currItem->PictureIsAvailable && (!skipIfNoColorDependence || currItem->isColorDependentImage()))
+ 		{
+ 			bool fho = currItem->imageFlippedH();
+ 			bool fvo = currItem->imageFlippedV();
+@@ -7159,7 +7159,7 @@
+ 	for (int a = 0; a < MasterItems.count(); ++a)
+ 	{
+ 		PageItem *currItem = MasterItems.at(a);
+-		if (currItem->PictureIsAvailable)
++		if (currItem->PictureIsAvailable && (!skipIfNoColorDependence || currItem->isColorDependentImage()))
+ 		{
+ 			bool fho = currItem->imageFlippedH();
+ 			bool fvo = currItem->imageFlippedV();
+diff -r ddd0662d0055 -r 941fab4627e8 Scribus/scribus/scribusdoc.h
+--- a/Scribus/scribus/scribusdoc.h	Mon Apr 07 09:53:06 2014 +0200
++++ b/Scribus/scribus/scribusdoc.h	Fri Apr 18 13:12:23 2014 +0200
+@@ -885,7 +885,7 @@
+ 	
+ 	void setRedrawBounding(PageItem *currItem);
+ 	void adjustCanvas(FPoint minPos, FPoint maxPos, bool absolute = false);
+-	void recalcPicturesRes(bool applyNewRes = false);
++	void recalcPicturesRes(bool applyNewRes = false, bool skipIfNoColorDependence = false);
+ 	void connectDocSignals();
+ 	void removeLayer(int l, bool dl = false); //FIXME: Make protected once scripter function no longer uses this directly
+ 	/*! \brief We call changed() whenever the document needs to know it has been changed.

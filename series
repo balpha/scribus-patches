@@ -11,3 +11,4 @@ quick-preview-toggle.patch
 image-effects-before-color-management.patch
 image-reload-progress-bar.patch
 keep-image-scale-and-position.patch
+no-image-recalc-on-color-changes.patch
