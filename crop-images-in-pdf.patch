@@ -1,0 +1,178 @@
+# HG changeset patch
+# Parent 098ad8095c1b725b43ed060ce47440626c544c37
+crop images when exporting to PDF
+
+diff -r 098ad8095c1b -r 65b53c32d6c5 Scribus/scribus/pdflib_core.cpp
+--- a/Scribus/scribus/pdflib_core.cpp	Sun Apr 20 07:46:19 2014 +0200
++++ b/Scribus/scribus/pdflib_core.cpp	Mon Apr 21 09:34:22 2014 +0200
+@@ -53,6 +53,7 @@
+ #include <QStack>
+ #include <QString>
+ #include <QTextCodec>
++#include <QtCore/qmath.h>
+ 
+ 
+ #include "bookmwin.h"
+@@ -6794,6 +6795,7 @@
+ 	bool   bitmapFromGS = false;
+ 	bool   isEmbeddedPDF = false;
+ 	bool   hasGrayProfile = false;
++	bool   cropped = false;
+ 	QString profInUse = Profil;
+ 	int    afl = Options.Resolution;
+ 	double ax, ay, a2, a1;
+@@ -6974,6 +6976,25 @@
+ 					PDF_Error_ImageLoadFailure(fn);
+ 					return false;
+ 				}
++				if (Options.CropImages)
++				{
++					int rx = qFloor(-x);
++					int ry = qFloor(y);
++					int rw = qCeil(c->width() / sx) + 1;
++					int rh = qCeil(c->height() / sy) + 1;
++					QImage qimg = img.qImage();
++					QRect rect(rx, ry, rw, rh);
++					rect = rect.intersected(qimg.rect());
++					if (rect != qimg.rect())
++					{
++						img = ScImage(qimg.copy(rect));
++						x = x + rect.x();
++						y = y - rect.y();
++						ImInfo.xa = x;
++						ImInfo.ya = y;
++						cropped = true;
++					}
++				}
+ 				if ((Options.RecalcPic) && (Options.PicRes < (qMax(72.0 / c->imageXScale(), 72.0 / c->imageYScale()))))
+ 				{
+ 					double afl = Options.PicRes;
+@@ -7252,7 +7273,7 @@
+ 			}
+ 			if (extensionIndicatesJPEG(ext) && (cm != PDFOptions::Compression_None))
+ 			{
+-				if (((img.imgInfo.orientation == 0) && (Options.UseRGB || Options.UseProfiles2) && (cm == PDFOptions::Compression_Auto) && (c->effectsInUse.count() == 0) && (img.imgInfo.colorspace == ColorSpaceRGB)) && (!img.imgInfo.progressive) && (!((Options.RecalcPic) && (Options.PicRes < (qMax(72.0 / c->imageXScale(), 72.0 / c->imageYScale()))))))
++				if (( !cropped && (img.imgInfo.orientation == 0) && (Options.UseRGB || Options.UseProfiles2) && (cm == PDFOptions::Compression_Auto) && (c->effectsInUse.count() == 0) && (img.imgInfo.colorspace == ColorSpaceRGB)) && (!img.imgInfo.progressive) && (!((Options.RecalcPic) && (Options.PicRes < (qMax(72.0 / c->imageXScale(), 72.0 / c->imageYScale()))))))
+ 				{
+ 					jpegUseOriginal = true;
+ 					cm = PDFOptions::Compression_JPEG;
+@@ -7355,7 +7376,7 @@
+ 			ImInfo.ya = sy;
+ 			ImInfo.RequestProps = c->pixm.imgInfo.RequestProps;
+ 		} // not embedded PDF
+-		if ((c->effectsInUse.count() == 0) && (!SharedImages.contains(fn)))
++		if (!cropped && (c->effectsInUse.count() == 0) && (!SharedImages.contains(fn)))
+ 			SharedImages.insert(fn, ImInfo);
+ 		ResCount++;
+ 	}
+diff -r 098ad8095c1b -r 65b53c32d6c5 Scribus/scribus/pdfoptions.h
+--- a/Scribus/scribus/pdfoptions.h	Sun Apr 20 07:46:19 2014 +0200
++++ b/Scribus/scribus/pdfoptions.h	Mon Apr 21 09:34:22 2014 +0200
+@@ -104,6 +104,7 @@
+ 	bool RecalcPic;
+ 	bool Bookmarks;
+ 	int  PicRes;
++	bool CropImages;
+ 	bool embedPDF;
+ 	PDFVersion Version;
+ 	int  Resolution;
+diff -r 098ad8095c1b -r 65b53c32d6c5 Scribus/scribus/pdfoptionsio.cpp
+--- a/Scribus/scribus/pdfoptionsio.cpp	Sun Apr 20 07:46:19 2014 +0200
++++ b/Scribus/scribus/pdfoptionsio.cpp	Mon Apr 21 09:34:22 2014 +0200
+@@ -107,6 +107,7 @@
+ 	addElem(m_root, "compressMethod", m_opts->CompressMethod);
+ 	addElem(m_root, "quality", m_opts->Quality);
+ 	addElem(m_root, "recalcPic", m_opts->RecalcPic);
++	addElem(m_root, "cropImages", m_opts->CropImages);
+ 	addElem(m_root, "bookmarks", m_opts->Bookmarks);
+ 	addElem(m_root, "picRes", m_opts->PicRes);
+ 	addElem(m_root, "embedPDF", m_opts->embedPDF);
+@@ -336,6 +337,8 @@
+ 		return false;
+ 	if (!readElem(m_root, "recalcPic", &m_opts->RecalcPic))
+ 		return false;
++	if (!readElem(m_root, "cropImages", &m_opts->CropImages))
++		m_opts->CropImages = false;
+ 	if (!readElem(m_root, "bookmarks", &m_opts->Bookmarks))
+ 		return false;
+ 	if (!readElem(m_root, "picRes", &m_opts->PicRes))
+diff -r 098ad8095c1b -r 65b53c32d6c5 Scribus/scribus/pdfopts.cpp
+--- a/Scribus/scribus/pdfopts.cpp	Sun Apr 20 07:46:19 2014 +0200
++++ b/Scribus/scribus/pdfopts.cpp	Mon Apr 21 09:34:22 2014 +0200
+@@ -241,6 +241,7 @@
+ 	Opts.SubsetList = Options->FontsToOutline;
+ 	Opts.RecalcPic = Options->DSColor->isChecked();
+ 	Opts.PicRes = Options->ValC->value();
++	Opts.CropImages = Options->CropImages->isChecked();
+ 	Opts.embedPDF = Options->EmbedPDF->isChecked();
+ 	Opts.Bookmarks = Options->CheckBM->isChecked();
+ 	Opts.Binding = Options->ComboBind->currentIndex();
+diff -r 098ad8095c1b -r 65b53c32d6c5 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Sun Apr 20 07:46:19 2014 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format.cpp	Mon Apr 21 09:34:22 2014 +0200
+@@ -673,6 +673,7 @@
+ 			{
+ 				m_Doc->PDF_Options.Articles = static_cast<bool>(pg.attribute("Articles").toInt());
+ 				m_Doc->PDF_Options.Thumbnails = static_cast<bool>(pg.attribute("Thumbnails").toInt());
++				m_Doc->PDF_Options.CropImages = static_cast<bool>(pg.attribute("CropImages").toInt());
+ 				m_Doc->PDF_Options.Compress = static_cast<bool>(pg.attribute("Compress").toInt());
+ 				m_Doc->PDF_Options.CompressMethod = (PDFOptions::PDFCompression) pg.attribute("CMethod", "0").toInt();
+ 				m_Doc->PDF_Options.Quality = pg.attribute("Quality", "0").toInt();
+diff -r 098ad8095c1b -r 65b53c32d6c5 Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp
+--- a/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Sun Apr 20 07:46:19 2014 +0200
++++ b/Scribus/scribus/plugins/fileloader/scribus134format/scribus134format_save.cpp	Mon Apr 21 09:34:22 2014 +0200
+@@ -659,6 +659,7 @@
+ 	docu.writeAttribute("Articles", static_cast<int>(m_Doc->PDF_Options.Articles));
+ 	docu.writeAttribute("Bookmarks", static_cast<int>(m_Doc->PDF_Options.Bookmarks));
+ 	docu.writeAttribute("Compress", static_cast<int>(m_Doc->PDF_Options.Compress));
++	docu.writeAttribute("CropImages", static_cast<int>(m_Doc->PDF_Options.CropImages));
+ 	docu.writeAttribute("CMethod", m_Doc->PDF_Options.CompressMethod);
+ 	docu.writeAttribute("Quality", m_Doc->PDF_Options.Quality);
+ 	docu.writeAttribute("EmbedPDF", static_cast<int>(m_Doc->PDF_Options.embedPDF));
+diff -r 098ad8095c1b -r 65b53c32d6c5 Scribus/scribus/tabpdfoptions.cpp
+--- a/Scribus/scribus/tabpdfoptions.cpp	Sun Apr 20 07:46:19 2014 +0200
++++ b/Scribus/scribus/tabpdfoptions.cpp	Mon Apr 21 09:34:22 2014 +0200
+@@ -75,6 +75,7 @@
+ 	doublePageLeft(0),
+ 	doublePageRight(0),
+ 	DSColor(0),
++	CropImages(0),
+ 	EmbedPDF(0),
+ 	EmbedProfs(0),
+ 	EmbedProfs2(0),
+@@ -361,6 +362,8 @@
+ 	tabLayout->addLayout( Layout13 );
+ 	Compression = new QCheckBox( tr( "Com&press Text and Vector Graphics" ), tabGeneral );
+ 	tabLayout->addWidget( Compression );
++	CropImages = new QCheckBox( tr( "Crop images to frame" ), tabGeneral );
++	tabLayout->addWidget( CropImages );
+ 	CBox = new QGroupBox( tr( "Image Compression Method" ), tabGeneral );
+ 	CBoxLayout = new QGridLayout( CBox );
+ 	CBoxLayout->setSpacing( 5 );
+@@ -964,6 +967,7 @@
+ 	Resolution->setToolTip( "<qt>" + tr( "Export resolution of text and vector graphics. This does not affect the resolution of bitmap images like photos." ) + "</qt>" );
+ 	EmbedPDF->setToolTip( "<qt>" + tr( "Export PDFs in image frames as embedded PDFs. This does *not* yet take care of colorspaces, so you should know what you are doing before setting this to 'true'." ) + "</qt>" );
+ 	Compression->setToolTip( "<qt>" + tr( "Enables lossless compression of text and graphics. Unless you have a reason, leave this checked. This reduces PDF file size." ) + "</qt>" );
++	CropImages->setToolTip( "<qt>" + tr( "Only save visible portions of bitmap images to the PDF. Disabling this for documents with many images can lead to a massive increase in PDF file size." ) + "</qt>" );
+ 	CMethod->setToolTip( "<qt>" + tr( "Method of compression to use for images. Automatic allows Scribus to choose the best method. ZIP is lossless and good for images with solid colors. JPEG is better at creating smaller PDF files which have many photos (with slight image quality loss possible). Leave it set to Automatic unless you have a need for special compression options." ) + "</qt>");
+ 	CQuality->setToolTip( "<qt>" + tr( "Compression quality levels for lossy compression methods: Minimum (25%), Low (50%), Medium (75%), High (85%), Maximum (95%). Note that a quality level does not directly determine the size of the resulting image - both size and quality loss vary from image to image at any given quality level. Even with Maximum selected, there is always some quality loss with jpeg." ) + "</qt>");
+ 	DSColor->setToolTip( "<qt>" + tr( "Limits the resolution of your bitmap images to the selected DPI. Images with a lower resolution will be left untouched. Leaving this unchecked will render them at their native resolution. Enabling this will increase memory usage and slow down export." ) + "</qt>" );
+@@ -1050,6 +1054,7 @@
+ 	CMethod->setCurrentIndex(Opts.CompressMethod);
+ 	CQuality->setCurrentIndex(Opts.Quality);
+ 	DSColor->setChecked(Opts.RecalcPic);
++	CropImages->setChecked(Opts.CropImages);
+ 	ValC->setValue(Opts.PicRes);
+ 	ValC->setEnabled(DSColor->isChecked() ? true : false);
+ 	if (mdoc != 0 && exporting)
+diff -r 098ad8095c1b -r 65b53c32d6c5 Scribus/scribus/tabpdfoptions.h
+--- a/Scribus/scribus/tabpdfoptions.h	Sun Apr 20 07:46:19 2014 +0200
++++ b/Scribus/scribus/tabpdfoptions.h	Mon Apr 21 09:34:22 2014 +0200
+@@ -84,6 +84,7 @@
+ 	QRadioButton* doublePageLeft;
+ 	QRadioButton* doublePageRight;
+ 	QCheckBox* DSColor;
++	QCheckBox* CropImages;
+ 	QCheckBox* EmbedPDF;
+ 	QCheckBox* EmbedProfs;
+ 	QCheckBox* EmbedProfs2;
